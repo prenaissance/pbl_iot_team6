@@ -1,0 +1,30 @@
+sequenceDiagram
+
+actor User
+participant Smartphone Client
+participant Server
+participant Device
+
+User ->>+ Smartphone Client : Introduce config changes
+Smartphone Client ->>+ Server : Request remote config instance update
+Server ->> Server : Update remote config instance
+Server -->>- Smartphone Client : Response success
+Smartphone Client -->>- User : Infobox success
+
+User ->>+ Smartphone Client : Request device update
+Smartphone Client ->> Smartphone Client : Check BTE connection to device
+
+alt No connection
+    Smartphone Client -->> User : Infobox failure
+end
+
+Smartphone Client -) Device : Update call signal (BTE)
+activate Device
+Device ->>+ Server : Request new config
+Server -->>- Device : Provide stored config instance
+
+Device ->> Device : Update local config (stored on SD)
+
+deactivate Device
+
+Smartphone Client -->>- User : Infobox success

@@ -1,0 +1,86 @@
+sequenceDiagram
+
+actor User
+participant RFID Reader
+participant MCU
+participant Server
+participant LCD
+participant Dispencing Mechanism
+participant Sensor
+participant LED Indicator
+
+User -) RFID Reader : Present RFID tag
+activate RFID Reader
+RFID Reader -)+ MCU : Provide UID
+deactivate RFID Reader
+
+MCU ->> MCU : Get user's record (SD Card)
+
+alt Not Found
+    MCU ->>+ Server : Request logging
+    Server -->>- MCU : Log unauthorized access attempt
+
+    MCU -)+ LCD : Change displayed message
+    LCD -)- User : Display response
+end
+        
+MCU ->> MCU : Extract user's schedule
+MCU ->> MCU : Get current time
+MCU ->> MCU : Check for assigned items
+
+alt Not Found
+    MCU -)+ LCD : Change displayed message
+    LCD -)- User : Display response
+end
+        
+MCU ->> MCU : Extract storage data
+
+alt Exhausted Supply
+    MCU ->>+ Server : Request logging
+    Server -->>- MCU : Log unfulfilled request
+
+    MCU -)+ LCD : Change displayed message
+    LCD -)- User : Display response
+end
+
+MCU -)+ Dispencing Mechanism : Initiate dispencing sequcence
+Dispencing Mechanism -)- User : Dispence pill
+
+MCU -) Sensor : Arm sensor
+activate Sensor
+Sensor ->> Sensor : Check for pill pick-up
+
+alt Failure
+    Sensor -) MCU : Notify about failure
+
+    MCU ->>+ Server : Request logging
+    Server -->>- MCU : Log pick-up failure
+else Success
+    Sensor -) MCU : Notify about success
+    deactivate Sensor
+
+    MCU ->>+ Server : Request logging
+    Server -->>- MCU : Log pick-up success
+end
+
+MCU -)+ LCD : Change displayed message
+LCD -)- User : Display response
+
+MCU ->>+ Server : Request logging
+Server -->>- MCU : Log fulfilled request
+
+MCU ->> MCU : Update storage records
+MCU ->> MCU : Check storage records
+
+alt Low Supply
+    MCU ->>+ Server : Request logging
+    Server -->>- MCU : Log low supply
+
+    MCU -)+ LCD : Change displayed message
+    LCD -)- User : Display response
+
+    MCU -)+ LED Indicator : Change status
+    LED Indicator -)- User : Highlight compartment with xhausted supply
+end
+
+deactivate MCU
