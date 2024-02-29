@@ -11,21 +11,25 @@ erDiagram
     PillSchedule {
         uuid id PK
         uuid pillSlotId FK
-        uuid userId FK
+        uuid profileId FK
         time[] dosageTimes
     }
 
-    User {
+    Owner {
         uuid id PK
         text username
         text passwordHash
         text salt
-        boolean isAdmin
+    }
+
+    Profile {
+        uuid id PK
+        text username
     }
 
     RfidTag {
         uuid id PK
-        uuid userId FK
+        uuid profileId FK
         timestamp createdAt
         timestamp lastUsed
         text tagId
@@ -33,14 +37,15 @@ erDiagram
 
     ProcessedEvent {
         uuid id PK
-        uuid userId FK
+        uuid profileId FK
         timestamp createdAt
         text eventType
         text eventData
     }
 
     PillSlot ||--o{ PillSchedule : has
-    User ||--o{ PillSchedule : has
-    User ||--o| RfidTag : has
-    User ||--o{ ProcessedEvent : "associated with"
+    Profile ||--o{ PillSchedule : has
+    Profile ||--o| RfidTag : has
+    Profile ||--o{ ProcessedEvent : "associated with"
+    Owner ||--o{ Profile : manages
 ```
