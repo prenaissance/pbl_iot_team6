@@ -25,6 +25,7 @@ erDiagram
     Profile {
         uuid id PK
         text username
+        uuid createdById FK
     }
 
     RfidTag {
