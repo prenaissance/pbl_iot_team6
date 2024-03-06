@@ -1,0 +1,19 @@
+version: "3"
+name: dispenser
+
+
+volumes:
+  pg-data:
+
+
+services:
+  db:
+    image: postgres:latest
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    ports:
+      - "5454:5432"
+    environment:
+      POSTGRES_DB: dispenser
+      POSTGRES_USER: dispenser
+      POSTGRES_PASSWORD: dispenser
