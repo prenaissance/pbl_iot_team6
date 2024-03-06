@@ -1,11 +1,23 @@
+using Dispenser.DataAccess;
+using Microsoft.EntityFrameworkCore;
+
 var builder = WebApplication.CreateBuilder(args);
+var configuration = builder.Configuration;
 
 // Add services to the container.
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddDbContext<Db>(options =>
+{
+    options.UseNpgsql(configuration.GetValue<string>("PostgresConnection"));
+});
 
 var app = builder.Build();
+
+using var scope = app.Services.CreateScope();
+Db db = scope.ServiceProvider.GetRequiredService<Db>();
+db.Database.Migrate(); // Apply any pending migrations, dev mode
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -23,7 +35,7 @@ var summaries = new[]
 
 app.MapGet("/weatherforecast", () =>
 {
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
+    var forecast = Enumerable.Range(1, 5).Select(index =>
         new WeatherForecast
         (
             DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
