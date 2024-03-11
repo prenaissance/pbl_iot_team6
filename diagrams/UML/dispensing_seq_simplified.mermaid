@@ -1,0 +1,55 @@
+sequenceDiagram
+
+actor User
+participant RFID Reader
+participant MCU
+participant Server
+participant Dispencing Mechanism
+participant IR Sensor
+
+User -) RFID Reader : Provide RFID tag
+activate RFID Reader
+RFID Reader -)+ MCU : Authenticate user
+deactivate RFID Reader
+
+alt Not Found
+    MCU ->>+ Server : Request logging
+    Server -->>- MCU : Log unauthorized access attempt
+
+    MCU -) User : Notify user via status indicators
+end
+
+MCU ->> MCU : Check schedule for assigned items
+
+alt Not Found
+    MCU -) User : Notify user via status indicators
+end
+
+MCU ->> MCU : Extract storage data
+
+alt Exhausted Supply
+    MCU ->>+ Server : Request logging
+    Server -->>- MCU : Log unfulfilled request
+
+    MCU -) User : Notify user via status indicators
+end
+
+MCU -)+ Dispencing Mechanism : Initiate dispencing sequcence
+Dispencing Mechanism -)- User : Provide medication
+MCU ->>+ IR Sensor : Check for pill pick-up
+
+IR Sensor -->>- MCU : Notify about result
+
+MCU ->>+ Server : Request logging
+Server -->>- MCU : Log result
+
+MCU ->> MCU : Update storage records
+
+alt Low Supply
+    MCU ->>+ Server : Request logging
+    Server -->>- MCU : Log low supply
+
+    MCU -) User : Notify user via status indicators
+end
+
+deactivate MCU
