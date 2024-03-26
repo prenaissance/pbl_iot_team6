@@ -1,4 +1,4 @@
-namespace Dispenser.Models.PillSchedule;
+namespace Dispenser.Models.PillSchedules;
 
 public class PillSlot
 {
