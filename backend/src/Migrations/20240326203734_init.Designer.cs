@@ -13,8 +13,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Dispenser.Migrations
 {
     [DbContext(typeof(Db))]
-    [Migration("20240326191439_add_device_id")]
-    partial class add_device_id
+    [Migration("20240326203734_init")]
+    partial class init
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -109,19 +109,22 @@ namespace Dispenser.Migrations
                     b.Property<Guid>("DeviceId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("PasswordHash")
+                    b.Property<byte[]>("PasswordHash")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("bytea");
 
-                    b.Property<string>("PasswordSalt")
+                    b.Property<byte[]>("PasswordSalt")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("bytea");
 
                     b.Property<string>("Username")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Username")
+                        .IsUnique();
 
                     b.ToTable("Owners");
                 });

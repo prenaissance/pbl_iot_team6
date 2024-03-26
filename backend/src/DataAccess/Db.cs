@@ -9,11 +9,13 @@ public class Db(DbContextOptions options) : DbContext(options)
 {
     protected override void OnModelCreating(ModelBuilder builder)
     {
-        builder.Entity<Owner>()
-            .HasMany(o => o.CreatedProfiles)
+        var owner = builder.Entity<Owner>();
+        owner.HasMany(o => o.CreatedProfiles)
             .WithOne(p => p.CreatedBy)
             .HasForeignKey(p => p.CreatedById)
             .OnDelete(DeleteBehavior.Cascade);
+        owner.HasIndex(o => o.Username)
+            .IsUnique();
 
         builder.Entity<Profile>()
             .HasOne(p => p.RfidTag)

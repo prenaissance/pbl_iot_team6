@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -7,32 +8,38 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Dispenser.Migrations
 {
     /// <inheritdoc />
-    public partial class Profiles : Migration
+    public partial class init : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AlterColumn<int>(
-                name: "ProfileId",
-                table: "PillSchedules",
-                type: "integer",
-                nullable: false,
-                oldClrType: typeof(Guid),
-                oldType: "uuid");
-
             migrationBuilder.CreateTable(
                 name: "Owners",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    DeviceId = table.Column<Guid>(type: "uuid", nullable: false),
                     Username = table.Column<string>(type: "text", nullable: false),
-                    PasswordHash = table.Column<string>(type: "text", nullable: false),
-                    PasswordSalt = table.Column<string>(type: "text", nullable: false)
+                    PasswordHash = table.Column<byte[]>(type: "bytea", nullable: false),
+                    PasswordSalt = table.Column<byte[]>(type: "bytea", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Owners", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "PillSlots",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    PillName = table.Column<string>(type: "text", nullable: false),
+                    PillCount = table.Column<long>(type: "bigint", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_PillSlots", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -51,6 +58,32 @@ namespace Dispenser.Migrations
                         name: "FK_Profiles_Owners_CreatedById",
                         column: x => x.CreatedById,
                         principalTable: "Owners",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "PillSchedules",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Times = table.Column<List<TimeOnly>>(type: "time without time zone[]", nullable: false),
+                    PillSlotId = table.Column<Guid>(type: "uuid", nullable: false),
+                    ProfileId = table.Column<int>(type: "integer", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_PillSchedules", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_PillSchedules_PillSlots_PillSlotId",
+                        column: x => x.PillSlotId,
+                        principalTable: "PillSlots",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_PillSchedules_Profiles_ProfileId",
+                        column: x => x.ProfileId,
+                        principalTable: "Profiles",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -97,6 +130,17 @@ namespace Dispenser.Migrations
                 });
 
             migrationBuilder.CreateIndex(
+                name: "IX_Owners_Username",
+                table: "Owners",
+                column: "Username",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PillSchedules_PillSlotId",
+                table: "PillSchedules",
+                column: "PillSlotId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_PillSchedules_ProfileId",
                 table: "PillSchedules",
                 column: "ProfileId");
@@ -116,22 +160,13 @@ namespace Dispenser.Migrations
                 table: "RfidTags",
                 column: "ProfileId",
                 unique: true);
-
-            migrationBuilder.AddForeignKey(
-                name: "FK_PillSchedules_Profiles_ProfileId",
-                table: "PillSchedules",
-                column: "ProfileId",
-                principalTable: "Profiles",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropForeignKey(
-                name: "FK_PillSchedules_Profiles_ProfileId",
-                table: "PillSchedules");
+            migrationBuilder.DropTable(
+                name: "PillSchedules");
 
             migrationBuilder.DropTable(
                 name: "ProcessedEvents");
@@ -140,22 +175,13 @@ namespace Dispenser.Migrations
                 name: "RfidTags");
 
             migrationBuilder.DropTable(
+                name: "PillSlots");
+
+            migrationBuilder.DropTable(
                 name: "Profiles");
 
             migrationBuilder.DropTable(
                 name: "Owners");
-
-            migrationBuilder.DropIndex(
-                name: "IX_PillSchedules_ProfileId",
-                table: "PillSchedules");
-
-            migrationBuilder.AlterColumn<Guid>(
-                name: "ProfileId",
-                table: "PillSchedules",
-                type: "uuid",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "integer");
         }
     }
 }

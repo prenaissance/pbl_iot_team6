@@ -106,19 +106,22 @@ namespace Dispenser.Migrations
                     b.Property<Guid>("DeviceId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("PasswordHash")
+                    b.Property<byte[]>("PasswordHash")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("bytea");
 
-                    b.Property<string>("PasswordSalt")
+                    b.Property<byte[]>("PasswordSalt")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("bytea");
 
                     b.Property<string>("Username")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Username")
+                        .IsUnique();
 
                     b.ToTable("Owners");
                 });
