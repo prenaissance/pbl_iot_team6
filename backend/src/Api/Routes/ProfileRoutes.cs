@@ -3,6 +3,7 @@ using Dispenser.DataAccess;
 using Dispenser.Dtos.Profiles;
 using Dispenser.Models.Profiles;
 using Dispenser.Services.Authentication;
+using Microsoft.AspNetCore.Http.HttpResults;
 
 namespace Dispenser.Api.Routes;
 
@@ -18,7 +19,7 @@ public static class ProfileRoutes
         return routes;
     }
 
-    private static async Task<IResult> GetProfile(
+    private static async Task<Results<Ok<Profile>, NotFound>> GetProfile(
         int id,
         Db db)
     {
@@ -31,7 +32,7 @@ public static class ProfileRoutes
         return TypedResults.Ok(profile);
     }
 
-    private static async Task<IResult> AddProfile(
+    private static async Task<Created<Profile>> AddProfile(
         AddProfileRequest profileRequest,
         ICallerService callerService,
         Db db)

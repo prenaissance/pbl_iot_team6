@@ -3,6 +3,7 @@ using Dispenser.DataAccess;
 using Dispenser.Dtos.Authentication;
 using Dispenser.Models.Profiles;
 using Dispenser.Services.Authentication;
+using Microsoft.AspNetCore.Http.HttpResults;
 
 namespace Dispenser.Api;
 
@@ -16,7 +17,7 @@ public static class AuthenticationRoutes
 
         return routes;
     }
-    private static IResult Register(RegistrationDto registrationDto, Db db, IJwtService jwtService)
+    private static Ok<JwtResponse> Register(RegistrationDto registrationDto, Db db, IJwtService jwtService)
     {
         var owner = new Owner
         {
@@ -32,7 +33,7 @@ public static class AuthenticationRoutes
         return TypedResults.Ok(new JwtResponse(jwt));
     }
 
-    private static IResult Login(LoginDto loginDto, Db db, IJwtService jwtService)
+    private static Results<Ok<JwtResponse>, UnauthorizedHttpResult> Login(LoginDto loginDto, Db db, IJwtService jwtService)
     {
         var owner = db.Owners
             .SingleOrDefault(o => o.Username == loginDto.Username);
