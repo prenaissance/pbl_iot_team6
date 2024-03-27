@@ -16,6 +16,8 @@ public class Db(DbContextOptions options) : DbContext(options)
             .OnDelete(DeleteBehavior.Cascade);
         owner.HasIndex(o => o.Username)
             .IsUnique();
+        owner.HasIndex(o => o.DeviceId)
+            .IsUnique();
 
         builder.Entity<Profile>()
             .HasOne(p => p.RfidTag)

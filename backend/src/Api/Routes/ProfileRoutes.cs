@@ -4,17 +4,21 @@ using Dispenser.Dtos.Profiles;
 using Dispenser.Models.Profiles;
 using Dispenser.Services.Authentication;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.EntityFrameworkCore;
 
 namespace Dispenser.Api.Routes;
 
 public static class ProfileRoutes
 {
+    public const string GET_PROFILE_NAME = "GetProfile";
     public static IEndpointRouteBuilder RegisterProfileRoutes(this IEndpointRouteBuilder routes)
     {
         var group = routes.MapGroup("/profiles");
 
-        group.MapGet("/api/profiles/{id}", GetProfile).WithAuthorization();
+        group.MapGet("/api/profiles", GetOwnProfiles).WithAuthorization();
+        group.MapGet("/api/profiles/{id}", GetProfile).WithAuthorization().WithName(GET_PROFILE_NAME);
         group.MapPost("/api/profiles", AddProfile).WithAuthorization();
+        group.MapDelete("/api/profiles/{id}", DeleteProfile).WithAuthorization();
 
         return routes;
     }
@@ -32,10 +36,24 @@ public static class ProfileRoutes
         return TypedResults.Ok(profile);
     }
 
+    private static async Task<Ok<Profile[]>> GetOwnProfiles(
+        Db db,
+        ICallerService callerService)
+    {
+        var callerData = callerService.GetCallerData();
+        var profiles = await db.Profiles
+            .Where(p => p.CreatedById == callerData.Id)
+            .ToArrayAsync();
+
+        return TypedResults.Ok(profiles);
+    }
+
+
     private static async Task<Created<Profile>> AddProfile(
         AddProfileRequest profileRequest,
         ICallerService callerService,
-        Db db)
+        Db db,
+        LinkGenerator linkGenerator)
     {
         var callerData = callerService.GetCallerData();
         var profile = new Profile
@@ -46,6 +64,30 @@ public static class ProfileRoutes
         db.Profiles.Add(profile);
         await db.SaveChangesAsync();
 
-        return TypedResults.Created($"/api/profiles/{profile.Id}", profile);
+        return TypedResults.Created(
+            linkGenerator.GetPathByName(GET_PROFILE_NAME, new { id = profile.Id }),
+            profile);
+    }
+
+    private static async Task<Results<NoContent, NotFound, BadRequest>> DeleteProfile(
+        int id,
+        Db db,
+        ICallerService callerService)
+    {
+        var profile = await db.Profiles.FindAsync(id);
+        if (profile is null)
+        {
+            return TypedResults.NotFound();
+        }
+        var callerData = callerService.GetCallerData();
+        if (profile.CreatedById != callerData.Id)
+        {
+            return TypedResults.BadRequest();
+        }
+
+        db.Profiles.Remove(profile);
+        await db.SaveChangesAsync();
+
+        return TypedResults.NoContent();
     }
 }
