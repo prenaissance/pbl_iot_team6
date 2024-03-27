@@ -74,5 +74,6 @@ var routes = app.MapGroup("/api");
 
 routes.RegisterAuthenticationRoutes();
 routes.RegisterProfileRoutes();
+routes.RegisterPillRoutes();
 
 app.Run();
