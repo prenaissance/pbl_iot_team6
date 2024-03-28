@@ -15,13 +15,22 @@ public static class PillRoutes
     {
         var group = routes.MapGroup("/pills");
         group.MapGet("/slots", GetPillSlots)
-            .WithAuthorization();
-        group.MapPut("/slots/{id}", EditPillSlot)
             .WithAuthorization()
-            .WithValidation<EditPillSlotRequest>();
+            .WithDescription("Get all pill slots with schedules");
+        group.MapPut("/slots", EditPillSlot)
+            .WithAuthorization()
+            .WithValidation<EditPillSlotRequest>()
+            .WithDescription("Edit a pill slot, returns the pill slot without schedules");
         group.MapPost("/slots/{id}/schedules", AddPillSchedules)
             .WithAuthorization()
             .WithValidation<AddPillSchedulesRequest>();
+        group.MapDelete("/slots/schedules", DeletePillSchedules)
+            .WithAuthorization()
+            .WithDescription("Delete pill schedules by ids");
+        group.MapPut("/slots/schedules", EditPillSchedule)
+            .WithAuthorization()
+            .WithValidation<EditPillScheduleRequest>()
+            .WithDescription("Edit pill schedule times");
 
         return routes;
     }
@@ -47,16 +56,15 @@ public static class PillRoutes
     private static async Task<Results<
         Ok<PillSlotResponse>, NotFound>
     > EditPillSlot(
+        EditPillSlotRequest request,
         Db db,
-        ICallerService callerService,
-        Guid id,
-        EditPillSlotRequest request
+        ICallerService callerService
     )
     {
         var callerData = callerService.GetCallerData();
         var pillSlot = await db.PillSlots
             .Where(ps => ps.OwnerId == callerData.Id)
-            .FirstOrDefaultAsync(ps => ps.Id == id);
+            .FirstOrDefaultAsync(ps => ps.Id == request.PillSlotId);
 
         if (pillSlot is null)
         {
@@ -74,10 +82,10 @@ public static class PillRoutes
     private static async Task<Results<
       Ok<PillSlotResponse>, NotFound>
     > AddPillSchedules(
-        Db db,
-        ICallerService callerService,
         Guid id,
-        AddPillSchedulesRequest request
+        AddPillSchedulesRequest request,
+        Db db,
+        ICallerService callerService
     )
     {
         var callerData = callerService.GetCallerData();
@@ -104,5 +112,59 @@ public static class PillRoutes
         await db.SaveChangesAsync();
 
         return TypedResults.Ok(pillSlot.ToPillSlotResponse());
+    }
+
+    private static async Task<Results<
+        NoContent, NotFound<string>>
+    > DeletePillSchedules(
+        Guid[] ids,
+        Db db,
+        ICallerService callerService
+    )
+    {
+        var callerData = callerService.GetCallerData();
+        var pillSchedules = await db.PillSchedules
+            .Where(ps => ps.PillSlot.OwnerId == callerData.Id)
+            .Where(ps => ids.Contains(ps.Id))
+            .ToArrayAsync();
+
+        if (pillSchedules.Length != ids.Length)
+        {
+            var notFoundIds = ids
+                .Except(pillSchedules.Select(ps => ps.Id))
+                .Select(id => id.ToString())
+                .ToArray();
+            return TypedResults.NotFound($"Pill schedules with ids {string.Join(", ", notFoundIds)} not found");
+        }
+
+        db.PillSchedules.RemoveRange(pillSchedules);
+
+        await db.SaveChangesAsync();
+
+        return TypedResults.NoContent();
+    }
+
+    private static Results<Ok<PillScheduleResponse>, NotFound> EditPillSchedule(
+        EditPillScheduleRequest request,
+        Db db,
+        ICallerService callerService
+    )
+    {
+        var callerData = callerService.GetCallerData();
+        var pillSchedule = db.PillSchedules
+            .Include(ps => ps.PillSlot)
+            .Where(ps => ps.PillSlot.OwnerId == callerData.Id)
+            .FirstOrDefault(ps => ps.Id == request.Id);
+
+        if (pillSchedule is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        pillSchedule.Times = request.Times.Select(t => t.ToTimeOnly()).ToList();
+
+        db.SaveChanges();
+
+        return TypedResults.Ok(pillSchedule.ToPillScheduleResponse());
     }
 }
