@@ -25,7 +25,7 @@ public class Owner
         PasswordSalt = hmac.Key;
         PasswordHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(password));
     }
-    public PillSlot[] PillSlots { get; } = [
+    public List<PillSlot> PillSlots { get; } = [
         new PillSlot { SlotNumber = 1, PillName = "Pill 1" },
         new PillSlot { SlotNumber = 2, PillName = "Pill 2" }
     ];

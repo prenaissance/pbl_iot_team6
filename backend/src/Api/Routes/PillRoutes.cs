@@ -1,5 +1,6 @@
 namespace Dispenser.Api.Routes;
 
+using Dispenser.Api.Extensions;
 using Dispenser.Api.Filters;
 using Dispenser.DataAccess;
 using Dispenser.Dtos.PillSchedules;
@@ -13,9 +14,14 @@ public static class PillRoutes
     public static IEndpointRouteBuilder RegisterPillRoutes(this IEndpointRouteBuilder routes)
     {
         var group = routes.MapGroup("/pills");
-        group.MapGet("/slots", GetPillSlots);
-        group.MapPut("/slots/{id}", EditPillSlot).WithValidation<EditPillSlotRequest>();
-        group.MapPost("/slots/{id}/schedules", AddPillSchedules).WithValidation<AddPillSchedulesRequest>();
+        group.MapGet("/slots", GetPillSlots)
+            .WithAuthorization();
+        group.MapPut("/slots/{id}", EditPillSlot)
+            .WithAuthorization()
+            .WithValidation<EditPillSlotRequest>();
+        group.MapPost("/slots/{id}/schedules", AddPillSchedules)
+            .WithAuthorization()
+            .WithValidation<AddPillSchedulesRequest>();
 
         return routes;
     }

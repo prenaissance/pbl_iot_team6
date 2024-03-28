@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text;
+using System.Text.Json;
 using Dispenser.Api;
 using Dispenser.Api.Routes;
 using Dispenser.DataAccess;
@@ -58,6 +59,7 @@ var app = builder.Build();
 using var scope = app.Services.CreateScope();
 Db db = scope.ServiceProvider.GetRequiredService<Db>();
 db.Database.Migrate(); // Apply any pending migrations, dev mode
+Console.WriteLine(JsonSerializer.Serialize(db.Owners.ToArray()));
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

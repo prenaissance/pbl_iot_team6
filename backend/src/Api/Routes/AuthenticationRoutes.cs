@@ -1,9 +1,11 @@
+using Dispenser.Api.Extensions;
 using Dispenser.Api.Filters;
 using Dispenser.DataAccess;
 using Dispenser.Dtos.Authentication;
 using Dispenser.Models.Profiles;
 using Dispenser.Services.Authentication;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.OpenApi.Models;
 
 namespace Dispenser.Api;
 
@@ -12,8 +14,12 @@ public static class AuthenticationRoutes
     public static IEndpointRouteBuilder RegisterAuthenticationRoutes(this IEndpointRouteBuilder routes)
     {
         var group = routes.MapGroup("/authentication");
-        group.MapPost("/register", Register).WithValidation<RegistrationDto>();
-        group.MapPost("/login", Login);
+        group.MapPost("/register", Register)
+            .WithValidation<RegistrationDto>()
+            .WithDescription("Registers a new user and their device and returns a JWT token");
+        group.MapPost("/login", Login)
+            .WithDescription("Logs in the user and returns a JWT token")
+            .WithExample<LoginDto>(new("admin", "Test12345!"));
 
         return routes;
     }
