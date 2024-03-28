@@ -8,6 +8,7 @@ using Dispenser.Services.Authentication;
 using Dispenser.Services.Identity;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpLogging;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -53,22 +54,28 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 builder.Services.AddAuthorization();
+builder.Services.AddHttpLogging(logging =>
+{
+    logging.LoggingFields = 0
+        | HttpLoggingFields.RequestMethod
+        | HttpLoggingFields.RequestPath
+        | HttpLoggingFields.RequestQuery
+        | HttpLoggingFields.ResponseStatusCode
+        | HttpLoggingFields.Duration;
+});
 
 var app = builder.Build();
 
 using var scope = app.Services.CreateScope();
 Db db = scope.ServiceProvider.GetRequiredService<Db>();
 db.Database.Migrate(); // Apply any pending migrations, dev mode
-Console.WriteLine(JsonSerializer.Serialize(db.Owners.ToArray()));
 
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+app.UseHttpLogging();
+app.UseSwagger();
+app.UseSwaggerUI();
 
-app.UseHttpsRedirection();
+// app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 

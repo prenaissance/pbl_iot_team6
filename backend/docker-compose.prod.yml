@@ -1,0 +1,12 @@
+version: '3'
+
+services:
+  backend:
+    build: .
+    ports:
+      - 5050:8080
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - PostgresConnection=Host=db;Port=5432;Database=dispenser;Username=dispenser;Password=dispenser
