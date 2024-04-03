@@ -1,6 +1,3 @@
-#include <LiquidCrystal_I2C.h>
-#include <Arduino.h>
-
 #define QUEUE_MAX_SIZE 64
 
 class LcdMsg {
