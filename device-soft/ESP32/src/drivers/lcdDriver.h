@@ -19,7 +19,10 @@ class LcdMsg {
 
         int getPriority() { return priority; }
 
-        bool checkLifetime() { return lifetime-- > 0; }
+        bool checkLifetime(int dt) { 
+            lifetime -= dt;
+            return lifetime > 0; 
+        }
 };
 
 class MsgQueue {
@@ -79,9 +82,10 @@ class LcdDriver {
         LiquidCrystal_I2C* lcd;
         MsgQueue mq;
         int current;
+        unsigned long lastUpdate;
 
     public:
-        LcdDriver(LiquidCrystal_I2C* lcdPtr) : lcd(lcdPtr), current(-1) {
+        LcdDriver(LiquidCrystal_I2C* lcdPtr) : lcd(lcdPtr), current(-1), lastUpdate(0) {
             reset();
         }
 
@@ -91,7 +95,7 @@ class LcdDriver {
 
         void update() {
             if (current != -1) {
-                if (!mq.accessCurr(current)->checkLifetime()) {
+                if (!mq.accessCurr(current)->checkLifetime(millis() - lastUpdate)) {
                     mq.deleteExpired(current);
                     current = -1;
                 }
@@ -106,6 +110,8 @@ class LcdDriver {
                     reset();
                 }
             }
+
+            lastUpdate = millis();
         }
 
         void display(const char* l1, const char* l2) {
