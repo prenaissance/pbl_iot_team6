@@ -7,14 +7,15 @@ function LogIn(){
         const dataToSend = {
             username: username,
             password: password,
-            // deviceId: "aintnobodygottimeforthat"
+            deviceId: "22ad34c6-2ff2-4dcf-a826-1994da215c8b"
         }
         console.log(url+'api/authentication/register');
 
-        await fetch(url+'/api/authentication/login', {
+        await fetch(url+'/api/authentication/register', {
             method: 'POST',
             headers: {
                 Accept: 'application/json',
+                'Content-Type' : 'application/json'
             },
             body: JSON.stringify(dataToSend),
         }).then(response => {
