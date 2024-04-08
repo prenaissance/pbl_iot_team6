@@ -26,12 +26,12 @@ function App (){
   }
 
   return(
-    <View>
-      <Button title='Led One On' />
-      <Button title='Led Two On' />
-      <Button title='Led Three On' />
-    </View>
-    // <LogIn/>
+    // <View>
+    //   <Button title='Led One On' />
+    //   <Button title='Led Two On' />
+    //   <Button title='Led Three On' />
+    // </View>
+    <LogIn/>
   )
 }
 export default App
