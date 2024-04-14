@@ -4,7 +4,8 @@ on:
     branches:
       - main
     paths:
-      - "backend/**"
+      - backend/**
+      - .github/workflows/backend_docker.yml
 
 jobs:
   build:
