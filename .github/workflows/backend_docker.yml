@@ -2,7 +2,7 @@ name: Builds and pushes backend Docker image to Docker Hub
 on:
   push:
     branches:
-      - main
+      - master
     paths:
       - backend/**
       - .github/workflows/backend_docker.yml
