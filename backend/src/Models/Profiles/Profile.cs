@@ -8,6 +8,6 @@ public class Profile
     public required string Username { get; set; }
     public int CreatedById { get; set; }
     public Owner CreatedBy { get; set; } = null!;
-    public RfidTag RfidTag { get; set; } = null!;
+    public RfidTag? RfidTag { get; set; } = null!;
     public List<PillSchedule> PillSchedules { get; set; } = [];
 }

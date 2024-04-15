@@ -15,10 +15,10 @@ public static class ProfileRoutes
     {
         var group = routes.MapGroup("/profiles");
 
-        group.MapGet("/api/profiles", GetOwnProfiles).WithAuthorization();
-        group.MapGet("/api/profiles/{id}", GetProfile).WithAuthorization().WithName(GET_PROFILE_NAME);
-        group.MapPost("/api/profiles", AddProfile).WithAuthorization();
-        group.MapDelete("/api/profiles/{id}", DeleteProfile).WithAuthorization();
+        group.MapGet("", GetOwnProfiles).WithAuthorization();
+        group.MapGet("/{id}", GetProfile).WithAuthorization().WithName(GET_PROFILE_NAME);
+        group.MapPost("", AddProfile).WithAuthorization();
+        group.MapDelete("/{id}", DeleteProfile).WithAuthorization();
 
         return routes;
     }
