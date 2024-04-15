@@ -37,7 +37,7 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(name: reactNativeOrigins,
-                      policy  =>
+                      policy =>
                       {
                           policy.WithOrigins("http://localhost:5037",
                                               "https://localhost:5037");
@@ -93,8 +93,10 @@ app.UseAuthorization();
 
 var routes = app.MapGroup("/api");
 
-routes.RegisterAuthenticationRoutes();
-routes.RegisterProfileRoutes();
-routes.RegisterPillRoutes();
+routes
+    .RegisterAuthenticationRoutes()
+    .RegisterProfileRoutes()
+    .RegisterPillRoutes()
+    .RegisterDeviceRoutes();
 
 app.Run();

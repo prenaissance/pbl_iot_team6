@@ -5,7 +5,6 @@ using Dispenser.Dtos.Authentication;
 using Dispenser.Models.Profiles;
 using Dispenser.Services.Authentication;
 using Microsoft.AspNetCore.Http.HttpResults;
-using Microsoft.OpenApi.Models;
 
 namespace Dispenser.Api;
 
