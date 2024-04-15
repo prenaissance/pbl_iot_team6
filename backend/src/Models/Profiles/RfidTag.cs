@@ -1,10 +1,7 @@
 namespace Dispenser.Models.Profiles;
 
-public class RfidTag
+public record RfidTag
 {
-    public int Id { get; set; }
-    public string Tag { get; set; } = null!;
-    public string? Description { get; set; }
-    public int ProfileId { get; set; }
-    public Profile Profile { get; set; } = null!;
+    public byte[] Rfid { get; set; } = new byte[20];
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

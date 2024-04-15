@@ -16,6 +16,8 @@ using Microsoft.OpenApi.Models;
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
 
+string reactNativeOrigins = "react-native-origins";
+
 // Add services to the container.
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
@@ -31,6 +33,15 @@ builder.Services.AddSwaggerGen(options =>
             BearerFormat = "JWT",
             Description = "JWT Authorization header using the Bearer scheme."
         });
+});
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(name: reactNativeOrigins,
+                      policy =>
+                      {
+                          policy.WithOrigins("http://localhost:5037",
+                                              "https://localhost:5037");
+                      });
 });
 builder.Services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly(), ServiceLifetime.Transient);
 builder.Services.AddDbContext<Db>(options =>
@@ -71,6 +82,7 @@ Db db = scope.ServiceProvider.GetRequiredService<Db>();
 db.Database.Migrate(); // Apply any pending migrations, dev mode
 
 // Configure the HTTP request pipeline.
+app.UseCors(reactNativeOrigins);
 app.UseHttpLogging();
 app.UseSwagger();
 app.UseSwaggerUI();
@@ -81,8 +93,10 @@ app.UseAuthorization();
 
 var routes = app.MapGroup("/api");
 
-routes.RegisterAuthenticationRoutes();
-routes.RegisterProfileRoutes();
-routes.RegisterPillRoutes();
+routes
+    .RegisterAuthenticationRoutes()
+    .RegisterProfileRoutes()
+    .RegisterPillRoutes()
+    .RegisterDeviceRoutes();
 
 app.Run();

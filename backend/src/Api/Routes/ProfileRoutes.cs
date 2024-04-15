@@ -1,4 +1,5 @@
 using Dispenser.Api.Extensions;
+using Dispenser.Api.Filters;
 using Dispenser.DataAccess;
 using Dispenser.Dtos.Profiles;
 using Dispenser.Models.Profiles;
@@ -15,10 +16,16 @@ public static class ProfileRoutes
     {
         var group = routes.MapGroup("/profiles");
 
-        group.MapGet("/api/profiles", GetOwnProfiles).WithAuthorization();
-        group.MapGet("/api/profiles/{id}", GetProfile).WithAuthorization().WithName(GET_PROFILE_NAME);
-        group.MapPost("/api/profiles", AddProfile).WithAuthorization();
-        group.MapDelete("/api/profiles/{id}", DeleteProfile).WithAuthorization();
+        group.MapGet("", GetOwnProfiles).WithAuthorization();
+        group.MapGet("/{id}", GetProfile)
+            .WithAuthorization()
+            .WithName(GET_PROFILE_NAME);
+        group.MapPost("", AddProfile).WithAuthorization();
+        group.MapDelete("/{id}", DeleteProfile).WithAuthorization();
+        group.MapPatch("/rfid", SetRfid)
+            .WithAuthorization()
+            .WithValidation<SetRfidRequest>()
+            .WithDescription("Set the RFID for a profile. Rfid encoded in base64.");
 
         return routes;
     }
@@ -86,6 +93,33 @@ public static class ProfileRoutes
         }
 
         db.Profiles.Remove(profile);
+        await db.SaveChangesAsync();
+
+        return TypedResults.NoContent();
+    }
+
+    private static async Task<Results<NoContent, NotFound>> SetRfid(
+        SetRfidRequest request,
+        Db db,
+        ICallerService callerService
+    )
+    {
+        var callerData = callerService.GetCallerData();
+        var ownerId = callerData.Id;
+        var profile = await db.Profiles
+            .Where(p => p.CreatedById == ownerId)
+            .FirstOrDefaultAsync(p => p.Id == request.ProfileId);
+
+        if (profile is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        profile.RfidTag = new RfidTag
+        {
+            Rfid = request.Rfid
+        };
+
         await db.SaveChangesAsync();
 
         return TypedResults.NoContent();

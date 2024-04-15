@@ -41,21 +41,26 @@ public class Db(DbContextOptions options) : DbContext(options)
         ]);
 
         var profile = builder.Entity<Profile>();
-        profile
-            .HasOne(p => p.RfidTag)
-            .WithOne(t => t.Profile)
-            .HasForeignKey<RfidTag>(t => t.ProfileId)
-            .OnDelete(DeleteBehavior.Cascade);
+        var rfidTag = profile
+            .OwnsOne(p => p.RfidTag);
+
+        rfidTag.Property(r => r.CreatedAt)
+            .HasDefaultValueSql("now()");
+        rfidTag.HasData([new {
+                ProfileId = 1,
+                Rfid = Enumerable.Range(0, 20).Select(i => (byte)i).ToArray(),
+                CreatedAt = DateTime.UtcNow }
+            ]);
         profile.HasData([
             new() {
                 Id = 1,
                 Username = "Little Brother",
-                CreatedById = 1
+                CreatedById = 1,
             },
             new() {
                 Id = 2,
                 Username = "Grandma",
-                CreatedById = 1
+                CreatedById = 1,
             }
         ]);
 
@@ -113,6 +118,5 @@ public class Db(DbContextOptions options) : DbContext(options)
     public DbSet<PillSchedule> PillSchedules { get; set; }
     public DbSet<Owner> Owners { get; set; }
     public DbSet<Profile> Profiles { get; set; }
-    public DbSet<RfidTag> RfidTags { get; set; }
     public DbSet<ProcessedEvent> ProcessedEvents { get; set; }
 }

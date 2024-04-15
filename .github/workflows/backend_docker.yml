@@ -1,0 +1,66 @@
+name: Builds and pushes backend Docker image to Docker Hub
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - backend/**
+      - .github/workflows/backend_docker.yml
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Also deploy?
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.build-image.outputs.image }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        id: build-image
+        uses: docker/build-push-action@v5
+        with:
+          context: backend
+          file: backend/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/dispenser-backend:latest
+
+  migrate-db:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup dotnet cli
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0
+      - name: Install ef core tool
+        run: dotnet tool install --global dotnet-ef
+      - name: Run migrations
+        run: dotnet ef database update --project backend/src/Dispenser.csproj
+        env:
+          PostgresConnection: ${{ secrets.POSTGRES_CONNECTION_EXTERNAL }}
+
+  deploy:
+    needs: [build, migrate-db]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Render
+        uses: johnbeynon/render-deploy-action@v0.0.8
+        with:
+          api-key: ${{ secrets.RENDER_API_KEY }}
+          service-id: ${{ secrets.RENDER_SERVICE_ID }}
