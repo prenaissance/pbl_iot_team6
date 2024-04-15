@@ -1,6 +1,6 @@
 #define MANAGER_CAPACITY 2
 
-class StateLedDriver {
+class LedDriver {
     private:
         int R, G;
 
@@ -18,9 +18,9 @@ class StateLedDriver {
         }
 
     public:
-        StateLedDriver() : R(-1), G(-1) {}
+        LedDriver() : R(-1), G(-1) {}
 
-        StateLedDriver(int pinR, int pinG) :
+        LedDriver(int pinR, int pinG) :
             R(pinR), G(pinG) {
             resetColors();
         }
@@ -47,12 +47,12 @@ class StateLedDriver {
         }
 };
 
-class StateLedDriverManager {
+class LedManager {
     private:
-        StateLedDriver instances[MANAGER_CAPACITY];
+        LedDriver instances[MANAGER_CAPACITY];
     
     public:
-        void init(StateLedDriver driverInstance, int id) {
+        void init(LedDriver driverInstance, int id) {
             instances[id] = driverInstance;
         }
 

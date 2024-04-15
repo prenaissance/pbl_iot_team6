@@ -3,15 +3,15 @@
 
 #define MAX_KEY_SIZE 6
 
-class RfidDriver {
+class Rfid {
    private:
     MFRC522 rfid;
     MFRC522::MIFARE_Key key;
 
    public:
-    RfidDriver() : rfid(0, 0) {}
+    Rfid() : rfid(0, 0) {}
 
-    RfidDriver(int ssPin, int rstPin) : rfid(ssPin, rstPin) {
+    Rfid(int ssPin, int rstPin) : rfid(ssPin, rstPin) {
         SPI.begin();      // Init SPI bus
         rfid.PCD_Init();  // Init MFRC522
 
@@ -23,9 +23,9 @@ class RfidDriver {
     MFRC522 getRfid() { return rfid; }
 };
 
-class RfidDriverManager {
+class RfidDriver {
    private:
-    RfidDriver *instance;
+    Rfid *instance;
 
     String convertHexToString(byte *buffer, byte bufferSize) {
         String output = "";
@@ -40,7 +40,7 @@ class RfidDriverManager {
     }
 
    public:
-    void init(RfidDriver *driverInstance) { instance = driverInstance; }
+    void init(Rfid *driverInstance) { instance = driverInstance; }
 
     void manageUid() {
         MFRC522 rfid = instance->getRfid();

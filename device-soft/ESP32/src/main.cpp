@@ -1,18 +1,63 @@
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #include <BLE2902.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
-#include <drivers/rfidDriver.h>
+#include <ESP32Servo.h>
+#include <HTTPClient.h>
+#include <LiquidCrystal_I2C.h>
+#include <WiFi.h>
 
-// Use www.uuidgenerator.net to get new UUIDs
+#include "drivers/dispenserDriver.h"
+#include "drivers/lcdDriver.h"
+#include "drivers/ledDriver.h"
+#include "drivers/pickupSys.h"
+#include "drivers/rfidDriver.h"
 
 #define BAUD_RATE 115200
 
+#define SERVO_PIN 18
+
+#define LED1_R 16
+#define LED1_G 17
+
+#define LED2_R 26
+#define LED2_G 27
+
+#define I2C_ADDR 0x27
+#define LCD_COLUMNS 16
+#define LCD_LINES 2
+
+#define SS_PIN 5
+#define RST_PIN 0
+
+const char *ssid = "Redmi Note 9 Pro";
+const char *password = "12345768";
+
+const char *scheduleServerHost = "";
+const char *scheduleUpdateEp = "";
+
+std::string deviceId = "1111-2222-3333";
+std::string userId = "";
+
+LiquidCrystal_I2C lcd(I2C_ADDR, LCD_COLUMNS, LCD_LINES);
+static LcdDriver ld(&lcd);
+
+Servo motor;
+static DispenserDriver dd(&motor);
+
+static LedManager lm;
+
+Rfid rfid(SS_PIN, RST_PIN);
+static RfidDriver rm;
+
+// Use www.uuidgenerator.net to get new UUIDs
+
 #define SERVICE_UUID "975b7600-ced6-4b3a-a4af-be038d43b8c9"
 
-#define FETCH_SIGNAL_CHAR_UUID "f62206df-79d6-4eb9-bfc8-72036bf1e3b3"
-#define FETCH_SIGNAL_CHAR_DESC "Client sets this bool 'flag' to call local configuration fetching"
+#define UPDATE_SIGNAL_CHAR_UUID "f62206df-79d6-4eb9-bfc8-72036bf1e3b3"
+#define UPDATE_SIGNAL_CHAR_DESC "Client sets this bool 'flag' to call local schedule Updateing"
 
 #define RFID_REQUEST_CHAR_UUID "30e27b63-3ee2-486a-a14f-e020be483ada"
 #define RFID_REQUEST_CHAR_DESC "Client uses this characteristic to request and recieve the RFID tag data"
@@ -23,21 +68,17 @@
 #define DEVICE_ID_CHAR_UUID "5a9bec66-0f89-4383-b779-c3b9162d2814"
 #define DEVICE_ID_CHAR_DESC "ID to send to client when connecting"
 
-#define SS_PIN 5
-#define RST_PIN 0
-
-RfidDriver rfidDriver(SS_PIN, RST_PIN);
-RfidDriverManager rm;
+StaticJsonDocument<1024> schedule;
 
 BLEServer *pServer = NULL;
 BLEService *pService = NULL;
 
-BLECharacteristic *pFetchSignChar = NULL;
+BLECharacteristic *pUpdateSignChar = NULL;
 BLECharacteristic *pRFIDReqChar = NULL;
 BLECharacteristic *pUserIDChar = NULL;
 BLECharacteristic *pDeviceIDChar = NULL;
 
-BLEDescriptor *pFetchSignDesc = NULL;
+BLEDescriptor *pUpdateSignDesc = NULL;
 BLEDescriptor *pRFIDReqDesc = NULL;
 BLEDescriptor *pUserIDDesc = NULL;
 BLEDescriptor *pDeviceIDDesc = NULL;
@@ -47,11 +88,8 @@ BLE2902 *pDeviceIDBLE2902 = NULL;
 
 static bool connectedClient = false;
 
-static bool fetchRequest = false;
+static bool UpdateRequest = false;
 static bool RFIDRequest = false;
-
-const std::string deviceId = "1111-2222-3333";
-static std::string userId = "";
 
 class MyServerCallbacks : public BLEServerCallbacks {
     void onConnect(BLEServer *pServer) {
@@ -74,13 +112,15 @@ class CharacteristicsCallbacks : public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic *pCharacteristic) {
         if (pCharacteristic == pUserIDChar) {
             userId = pCharacteristic->getValue();
-        } else if (pCharacteristic == pFetchSignChar) {
-            fetchRequest = true;
+        } else if (pCharacteristic == pUpdateSignChar) {
+            UpdateRequest = true;
         } else if (pCharacteristic == pRFIDReqChar) {
             RFIDRequest = true;
         }
     }
 };
+
+void updateSchedule();
 
 void setup() {
     Serial.begin(BAUD_RATE);
@@ -104,8 +144,8 @@ void setup() {
     ~ BLECharacteristic::PROPERTY_NOTIFY - The characteristic supports being pushed to the client
     */
 
-    pFetchSignChar = pService->createCharacteristic(
-        FETCH_SIGNAL_CHAR_UUID,
+    pUpdateSignChar = pService->createCharacteristic(
+        UPDATE_SIGNAL_CHAR_UUID,
         BLECharacteristic::PROPERTY_WRITE);
 
     pRFIDReqChar = pService->createCharacteristic(
@@ -124,9 +164,9 @@ void setup() {
 
     // Ass dome info descriptors for all the characteristics
 
-    pFetchSignDesc = new BLEDescriptor((uint16_t)0x2901);
-    pFetchSignDesc->setValue(FETCH_SIGNAL_CHAR_DESC);
-    pFetchSignChar->addDescriptor(pFetchSignDesc);
+    pUpdateSignDesc = new BLEDescriptor((uint16_t)0x2901);
+    pUpdateSignDesc->setValue(UPDATE_SIGNAL_CHAR_DESC);
+    pUpdateSignChar->addDescriptor(pUpdateSignDesc);
 
     pRFIDReqDesc = new BLEDescriptor((uint16_t)0x2901);
     pRFIDReqDesc->setValue(RFID_REQUEST_CHAR_DESC);
@@ -142,7 +182,7 @@ void setup() {
 
     /*
     For "notifications" to work properly it is necessary to
-    configure them with the BLE2902 Descriptor
+    scheduleure them with the BLE2902 Descriptor
     */
 
     pRFIDReqBLE2902 = new BLE2902();
@@ -156,13 +196,60 @@ void setup() {
     pService->start();
     pServer->getAdvertising()->start();
 
-    pFetchSignChar->setCallbacks(new CharacteristicsCallbacks());
+    pUpdateSignChar->setCallbacks(new CharacteristicsCallbacks());
     pRFIDReqChar->setCallbacks(new CharacteristicsCallbacks());
     pUserIDChar->setCallbacks(new CharacteristicsCallbacks());
 
-    rm.init(&rfidDriver);
+    WiFi.begin(ssid, password);
+    Serial.print("Connecting to WiFi");
+
+    while (WiFi.status() != WL_CONNECTED) {
+        Serial.print(".");
+        delay(500);
+    }
+
+    motor.attach(SERVO_PIN);
+
+    lm.init(LedDriver(LED1_R, LED1_G), 0);
+    lm.init(LedDriver(LED2_R, LED2_G), 1);
+
+    rm.init(&rfid);
 }
 
 void loop() {
     rm.manageUid();
+}
+
+void updateSchedule() {
+    if ((WiFi.status() == WL_CONNECTED)) {
+        HTTPClient client;
+
+        char url[64];
+        strcpy(url, scheduleServerHost);
+        strcat(url, scheduleUpdateEp);
+        strcat(url, deviceId.c_str());
+
+        client.begin(url);
+        int httpCode = client.GET();
+
+        if (httpCode > 0) {
+            String payload = client.getString();
+            Serial.println("\nStatuscode: " + String(httpCode));
+            Serial.println(payload);
+
+            DeserializationError error = deserializeJson(schedule, payload);
+
+            if (error) {
+                Serial.print(F("deserializeJson() failed: "));
+                Serial.println(error.c_str());
+                return;
+            }
+
+            Serial.println("Local schedule successfully updated!");
+        } else {
+            Serial.println("Error on HTTP request");
+        }
+    } else {
+        Serial.println("No WiFi connection!");
+    }
 }
