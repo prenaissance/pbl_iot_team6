@@ -1,13 +1,18 @@
 #include <Arduino.h>
-#include <ArduinoJson.h>
-#include <BLE2902.h>
+#include <esp_system.h>
+#include <time.h>
+
+#include <ESP32Servo.h>
+#include <LiquidCrystal_I2C.h>
+
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
-#include <ESP32Servo.h>
+#include <BLE2902.h>
+
 #include <HTTPClient.h>
-#include <LiquidCrystal_I2C.h>
 #include <WiFi.h>
+#include <ArduinoJson.h>
 
 #include "drivers/dispenserDriver.h"
 #include "drivers/lcdDriver.h"
@@ -15,7 +20,7 @@
 #include "drivers/pickupSys.h"
 #include "drivers/rfidDriver.h"
 
-#define BAUD_RATE 115200
+#define BAUD_RATE 9600
 
 #define SERVO_PIN 18
 
@@ -38,7 +43,7 @@ const char *password = "12345768";
 const char *scheduleServerHost = "";
 const char *scheduleUpdateEp = "";
 
-std::string deviceId = "1111-2222-3333";
+std::string deviceId = "";
 std::string userId = "";
 
 LiquidCrystal_I2C lcd(I2C_ADDR, LCD_COLUMNS, LCD_LINES);
@@ -54,19 +59,19 @@ static RfidDriver rm;
 
 // Use www.uuidgenerator.net to get new UUIDs
 
-#define SERVICE_UUID "975b7600-ced6-4b3a-a4af-be038d43b8c9"
+#define SERVICE_UUID            "975b7600-ced6-4b3a-a4af-be038d43b8c9"
 
 #define UPDATE_SIGNAL_CHAR_UUID "f62206df-79d6-4eb9-bfc8-72036bf1e3b3"
-#define UPDATE_SIGNAL_CHAR_DESC "Client sets this bool 'flag' to call local schedule Updateing"
+#define UPDATE_SIGNAL_CHAR_DESC "Client sets this bool 'flag' to call local schedule updating"
 
-#define RFID_REQUEST_CHAR_UUID "30e27b63-3ee2-486a-a14f-e020be483ada"
-#define RFID_REQUEST_CHAR_DESC "Client uses this characteristic to request and recieve the RFID tag data"
+#define RFID_REQUEST_CHAR_UUID  "30e27b63-3ee2-486a-a14f-e020be483ada"
+#define RFID_REQUEST_CHAR_DESC  "Client uses this characteristic to request and recieve the RFID tag data"
 
-#define USER_ID_CHAR_UUID "a4bd67ef-d298-460e-88fd-2857885b0724"
-#define USER_ID_CHAR_DESC "ID to get from client when connecting"
+#define USER_ID_CHAR_UUID       "a4bd67ef-d298-460e-88fd-2857885b0724"
+#define USER_ID_CHAR_DESC       "ID to get from client when connecting"
 
-#define DEVICE_ID_CHAR_UUID "5a9bec66-0f89-4383-b779-c3b9162d2814"
-#define DEVICE_ID_CHAR_DESC "ID to send to client when connecting"
+#define DEVICE_ID_CHAR_UUID     "5a9bec66-0f89-4383-b779-c3b9162d2814"
+#define DEVICE_ID_CHAR_DESC     "ID to send to client when connecting"
 
 StaticJsonDocument<1024> schedule;
 
@@ -122,7 +127,38 @@ class CharacteristicsCallbacks : public BLECharacteristicCallbacks {
 
 void updateSchedule();
 
+const char base64Chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+std::string uint8_to_base64(const uint8_t* data, size_t len) {
+    std::string encoded_data;
+
+    for (size_t i = 0, j = 0; i < len; i += 3, j += 4) {
+        uint8_t triple[3] = {data[i], (i + 1 < len) ? data[i + 1] : 0, (i + 2 < len) ? data[i + 2] : 0};
+
+        // Encode each byte and pack into 4 characters
+        encoded_data += base64Chars[(triple[0] >> 2) & 0x3F];
+        encoded_data += base64Chars[((triple[0] & 3) << 4) | ((triple[1] >> 4) & 0x0F)];
+        encoded_data += base64Chars[((triple[1] & 0x0F) << 2) | ((triple[2] >> 6) & 0x03)];
+        encoded_data += base64Chars[triple[2] & 0x3F];
+
+        // Pad with '=' for incomplete bytes
+        if (i + 1 >= len) {
+            encoded_data += '=';
+        }
+
+        if (i + 2 >= len) {
+            encoded_data += '=';
+        }
+  }
+
+    return encoded_data;
+}
+
 void setup() {
+    uint8_t deviceUUID[16];
+    esp_fill_random(deviceUUID, sizeof(deviceUUID));
+    deviceId = uint8_to_base64(deviceUUID, sizeof(deviceUUID));
+
     Serial.begin(BAUD_RATE);
 
     BLEDevice::init("ESP32");
@@ -146,21 +182,25 @@ void setup() {
 
     pUpdateSignChar = pService->createCharacteristic(
         UPDATE_SIGNAL_CHAR_UUID,
-        BLECharacteristic::PROPERTY_WRITE);
+        BLECharacteristic::PROPERTY_WRITE
+    );
 
     pRFIDReqChar = pService->createCharacteristic(
         RFID_REQUEST_CHAR_UUID,
         BLECharacteristic::PROPERTY_WRITE |
-            BLECharacteristic::PROPERTY_NOTIFY);
+        BLECharacteristic::PROPERTY_NOTIFY
+    );
 
     pUserIDChar = pService->createCharacteristic(
         USER_ID_CHAR_UUID,
-        BLECharacteristic::PROPERTY_WRITE);
+        BLECharacteristic::PROPERTY_WRITE
+    );
 
     pDeviceIDChar = pService->createCharacteristic(
         DEVICE_ID_CHAR_UUID,
         BLECharacteristic::PROPERTY_READ |
-            BLECharacteristic::PROPERTY_NOTIFY);
+        BLECharacteristic::PROPERTY_NOTIFY
+    );
 
     // Ass dome info descriptors for all the characteristics
 
