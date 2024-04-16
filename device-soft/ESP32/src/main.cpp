@@ -1,6 +1,7 @@
 #include <Arduino.h>
-#include <esp_system.h>
-#include <time.h>
+
+#include <sstream>
+#include <iomanip>
 
 #include <ESP32Servo.h>
 #include <LiquidCrystal_I2C.h>
@@ -13,6 +14,9 @@
 #include <HTTPClient.h>
 #include <WiFi.h>
 #include <ArduinoJson.h>
+
+#include <MFRC522.h>
+#include <SPI.h>
 
 #include "drivers/dispenserDriver.h"
 #include "drivers/lcdDriver.h"
@@ -40,10 +44,10 @@
 const char *ssid = "Redmi Note 9 Pro";
 const char *password = "12345768";
 
-const char *scheduleServerHost = "";
-const char *scheduleUpdateEp = "";
+const char *scheduleServerHost = "dispenser-backend.onrender.com";
 
-std::string deviceId = "";
+uint8_t deviceIdBytes[16];
+std::string deviceIdBase64 = "";
 std::string userId = "";
 
 LiquidCrystal_I2C lcd(I2C_ADDR, LCD_COLUMNS, LCD_LINES);
@@ -54,8 +58,8 @@ static DispenserDriver dd(&motor);
 
 static LedManager lm;
 
-Rfid rfid(SS_PIN, RST_PIN);
-static RfidDriver rm;
+// Rfid rfid(SS_PIN, RST_PIN);
+// static RfidDriver rm;
 
 // Use www.uuidgenerator.net to get new UUIDs
 
@@ -96,13 +100,15 @@ static bool connectedClient = false;
 static bool UpdateRequest = false;
 static bool RFIDRequest = false;
 
+std::string uint8_tToHexString(const uint8_t*, size_t);
+std::string uuid4Format(const std::string&);
+
 class MyServerCallbacks : public BLEServerCallbacks {
     void onConnect(BLEServer *pServer) {
         connectedClient = true;
         Serial.println("A client has connected!");
 
-        pDeviceIDChar->setValue(deviceId);
-        pDeviceIDChar->notify();
+        pDeviceIDChar->setValue(uint8_tToHexString(deviceIdBytes, 16));
     }
 
     void onDisconnect(BLEServer *pServer) {
@@ -127,39 +133,14 @@ class CharacteristicsCallbacks : public BLECharacteristicCallbacks {
 
 void updateSchedule();
 
-const char base64Chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-std::string uint8_to_base64(const uint8_t* data, size_t len) {
-    std::string encoded_data;
-
-    for (size_t i = 0, j = 0; i < len; i += 3, j += 4) {
-        uint8_t triple[3] = {data[i], (i + 1 < len) ? data[i + 1] : 0, (i + 2 < len) ? data[i + 2] : 0};
-
-        // Encode each byte and pack into 4 characters
-        encoded_data += base64Chars[(triple[0] >> 2) & 0x3F];
-        encoded_data += base64Chars[((triple[0] & 3) << 4) | ((triple[1] >> 4) & 0x0F)];
-        encoded_data += base64Chars[((triple[1] & 0x0F) << 2) | ((triple[2] >> 6) & 0x03)];
-        encoded_data += base64Chars[triple[2] & 0x3F];
-
-        // Pad with '=' for incomplete bytes
-        if (i + 1 >= len) {
-            encoded_data += '=';
-        }
-
-        if (i + 2 >= len) {
-            encoded_data += '=';
-        }
-  }
-
-    return encoded_data;
-}
-
 void setup() {
-    uint8_t deviceUUID[16];
-    esp_fill_random(deviceUUID, sizeof(deviceUUID));
-    deviceId = uint8_to_base64(deviceUUID, sizeof(deviceUUID));
-
     Serial.begin(BAUD_RATE);
+
+    // Generate an UUID for the device
+    esp_fill_random(deviceIdBytes, sizeof(deviceIdBytes));
+    deviceIdBase64 = uuid4Format(uint8_tToHexString(deviceIdBytes, 16));
+
+    deviceIdBase64 = "11111111-1111-1111-1111-111111111111";
 
     BLEDevice::init("ESP32");
 
@@ -253,30 +234,31 @@ void setup() {
     lm.init(LedDriver(LED1_R, LED1_G), 0);
     lm.init(LedDriver(LED2_R, LED2_G), 1);
 
-    rm.init(&rfid);
+    // rm.init(&rfid);
 }
 
 void loop() {
-    rm.manageUid();
+    updateSchedule();
+    delay(5000);
+
+    // rm.manageUid();
 }
 
 void updateSchedule() {
     if ((WiFi.status() == WL_CONNECTED)) {
         HTTPClient client;
 
-        char url[64];
-        strcpy(url, scheduleServerHost);
-        strcat(url, scheduleUpdateEp);
-        strcat(url, deviceId.c_str());
+        char url[100] = "https://";
+        strcat(url, scheduleServerHost);
+        strcat(url, "/api/devices/");
+        strcat(url, deviceIdBase64.c_str());    
+        strcat(url, "/config");
 
         client.begin(url);
         int httpCode = client.GET();
 
         if (httpCode > 0) {
             String payload = client.getString();
-            Serial.println("\nStatuscode: " + String(httpCode));
-            Serial.println(payload);
-
             DeserializationError error = deserializeJson(schedule, payload);
 
             if (error) {
@@ -292,4 +274,26 @@ void updateSchedule() {
     } else {
         Serial.println("No WiFi connection!");
     }
+}
+
+std::string uint8_tToHexString(const uint8_t* data, size_t len) {
+    std::stringstream ss;
+    ss << std::hex;
+
+    for (size_t i = 0; i < len; ++i) {
+        ss << std::setw(2) << std::setfill('0') << static_cast<int>(data[i]);
+    }
+
+    return ss.str();
+}
+
+std::string uuid4Format(const std::string& uuid_str) {
+    std::string formatted_uuid = 
+        uuid_str.substr(0, 8) + "-" +
+        uuid_str.substr(8, 4) + "-" +
+        uuid_str.substr(12, 4) + "-" +
+        uuid_str.substr(16, 4) + "-" +
+        uuid_str.substr(20);
+
+    return formatted_uuid;
 }

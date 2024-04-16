@@ -1,5 +1,3 @@
-#include <Arduino.h>
-
 #define CSH_FREQ 277
 
 class PiezoBuzzerDriver {
