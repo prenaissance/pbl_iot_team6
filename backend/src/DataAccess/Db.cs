@@ -48,7 +48,7 @@ public class Db(DbContextOptions options) : DbContext(options)
             .HasDefaultValueSql("now()");
         rfidTag.HasData([new {
                 ProfileId = 1,
-                Rfid = Enumerable.Range(0, 20).Select(i => (byte)i).ToArray(),
+                Rfid = new byte[]{0x01, 0x02, 0x03, 0x04},
                 CreatedAt = DateTime.UtcNow }
             ]);
         profile.HasData([

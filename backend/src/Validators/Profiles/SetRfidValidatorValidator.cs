@@ -9,7 +9,8 @@ public class SetRfidValidator : AbstractValidator<SetRfidRequest>
     {
         RuleFor(x => x.ProfileId).NotEmpty();
         RuleFor(x => x.Rfid)
-            .Must(x => x.Length == 20)
-            .WithMessage(r => $"Rfid must be 20 bytes long. Got {r.Rfid.Length} bytes.");
+            .NotEmpty()
+            .Must(x => x.Length <= 10)
+            .WithMessage(r => $"Rfid must be at most 10 bytes long. Got {r.Rfid.Length} bytes.");
     }
 }
