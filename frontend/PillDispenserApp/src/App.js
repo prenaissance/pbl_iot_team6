@@ -17,7 +17,13 @@ import {
   Button,
 } from 'react-native';
 import { Colors, DebugInstructions, Header, LearnMoreLinks, ReloadInstructions } from "react-native/Libraries/NewAppScreen"
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+
 import LogIn from './LogIn';
+import Users from './Users';
+
+const Stack = createNativeStackNavigator();
 
 function App (){
   const isDarkMode = useColorScheme() === "dark"
@@ -31,7 +37,15 @@ function App (){
     //   <Button title='Led Two On' />
     //   <Button title='Led Three On' />
     // </View>
-    <LogIn/>
+    // <LogIn/>
+    <NavigationContainer>
+      <Stack.Navigator
+        screenOptions={{headerShown: false}}
+      >
+        {/* <Stack.Screen name="Login" component={LogIn}/> */}
+        <Stack.Screen name="Users" component={Users}/>
+      </Stack.Navigator>
+    </NavigationContainer>
   )
 }
 export default App
