@@ -2,8 +2,10 @@ import React, {useState}  from 'react';
 import { SafeAreaView, View, Text, Button, TextInput, TouchableOpacity } from 'react-native';
 import url from '../shared/variables';
 import PillButton from '../shared/pill-button';
+import {getData, storeData} from '../shared/storage-utils.js'
 function LogIn(){
     const handleSubmit = async() => {
+        console.log(await getData('token'));
         const dataToSend = {
             username: username,
             password: password,
@@ -19,7 +21,8 @@ function LogIn(){
             body: JSON.stringify(dataToSend),
         }).then(response => response.json()).then(
             data => {
-                console.log(data);
+                storeData('token', data['token']);
+                console.log('success!')
             }
         ).catch(error => {
             console.error(error);

@@ -1,36 +1,47 @@
-import React from 'react';
-import { SafeAreaView, View, Text, Image, TextInput, TouchableOpacity, FlatList } from 'react-native';
+import React , {useEffect, useState} from 'react';
+import { SafeAreaView, View, Text, Image, TextInput, TouchableOpacity, FlatList, ActivityIndicator } from 'react-native';
 import { NavigationAction } from '@react-navigation/native';
-
+import url from '../shared/variables.js'
 import Tab from '../shared/tab.js'
 import SearchBar from '../shared/search-bar.js';
 import BottomBar from '../shared/bottom-bar.js';
+import { getData } from '../shared/storage-utils.js';
+
 
 function Users({navigation}){
 
-    data = [
-        {
-            name: 'Alex',
-            id: '1'
-        },
-        {
-            name: 'Artiom',
-            id: '2'
-        },
-        {
-            name: 'Max',
-            id: '3'
-        },
-        {
-            name: 'Misha',
-            id: '4'
-        }
-    ];
+    const [data, setData] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const fetchUsers = async() =>{
+        const token = await getData('token');
+        console.log('awaiting...');
+        setLoading(true);
+        await fetch(url+'api/profiles',{
+            method: 'GET',
+            headers:{
+                Accept: 'application/json',
+                'Content-Type' : 'application/json',
+                'Authorization' : 'Bearer '+token,
+            },
+        })
+        // .then(response => console.log(response))
+        .then(response => response.json()).then(_data => {
+            // console.log(_data);
+            setData(_data);
+            console.log("success!");
+            setLoading(false);
+        })
+        .catch(e => console.error(e))
+    }
+    useEffect(() => {
+        // Update the document title using the browser API
+        fetchUsers()
+      }, []);
     
     const renderItem = ({item}) =>{
         return(
             <View style={{marginBottom:12}}>
-                <Tab type='user' title={item.name} text='Tap to select'/>
+                <Tab type='user' title={item.username} text='Tap to select'/>
             </View>
         )
     }
@@ -46,11 +57,17 @@ function Users({navigation}){
             </Text>
 
             <SearchBar/>
-            <FlatList
-                data={data}
-                renderItem={renderItem}
-                keyExtractor={item=>item.id}
-            />
+            {loading 
+                ?   <ActivityIndicator
+                        size={'large'}
+                    />
+                :  <FlatList
+                        data={data}
+                        renderItem={renderItem}
+                        keyExtractor={item=>item.id}
+                    />
+            }
+           
                 
 
             <TouchableOpacity
