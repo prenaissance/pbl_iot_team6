@@ -12,7 +12,9 @@ function Tab(props){
             iconPath = tabIcons.user;
     }
     return(
-        <TouchableOpacity>
+        <TouchableOpacity
+            style={{width:375}}
+        >
             <View
                 style={{
                     backgroundColor:'#e9e9e9',
@@ -21,6 +23,7 @@ function Tab(props){
                     alignContent: 'center',
                     flexDirection:'row',
                     alignItems: 'center',
+                    borderRadius: 5,
                 }}
             >
                 <Image 

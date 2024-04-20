@@ -1,5 +1,5 @@
 import React from 'react';
-import { SafeAreaView, View, Text, Button, TextInput, TouchableOpacity, Image } from 'react-native';
+import {TextInput} from 'react-native';
 
 function SearchBar(){
     return(

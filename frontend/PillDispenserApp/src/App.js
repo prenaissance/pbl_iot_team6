@@ -22,6 +22,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import LogIn from './LogIn';
 import Users from './Users';
+import NewUser from './NewUser';
 
 const Stack = createNativeStackNavigator();
 
@@ -44,6 +45,7 @@ function App (){
       >
         {/* <Stack.Screen name="Login" component={LogIn}/> */}
         <Stack.Screen name="Users" component={Users}/>
+        <Stack.Screen name="NewUser" component={NewUser}/>
       </Stack.Navigator>
     </NavigationContainer>
   )

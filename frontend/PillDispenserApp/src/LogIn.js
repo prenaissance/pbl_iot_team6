@@ -1,7 +1,7 @@
 import React, {useState}  from 'react';
 import { SafeAreaView, View, Text, Button, TextInput, TouchableOpacity } from 'react-native';
 import url from '../shared/variables';
-
+import PillButton from '../shared/pill-button';
 function LogIn(){
     const handleSubmit = async() => {
         const dataToSend = {
@@ -9,17 +9,19 @@ function LogIn(){
             password: password,
             deviceId: "22ad34c6-2ff2-4dcf-a826-1994da215c8b"
         }
-
-        await fetch(url+'api/authentication/register', {
+        console.log("awaiting...");
+        await fetch(url+'api/authentication/login', {
             method: 'POST',
             headers: {
                 Accept: 'application/json',
                 'Content-Type' : 'application/json'
             },
             body: JSON.stringify(dataToSend),
-        }).then(response => {
-            console.log(response)
-        }).catch(error => {
+        }).then(response => response.json()).then(
+            data => {
+                console.log(data);
+            }
+        ).catch(error => {
             console.error(error);
         })
     }
@@ -59,7 +61,7 @@ function LogIn(){
                 marginTop:15
             }}>Don't have an account? Sign Up</Text>
 
-            <TouchableOpacity
+            {/* <TouchableOpacity
                 style={{
                     width:300,
                     height: 73, 
@@ -77,7 +79,11 @@ function LogIn(){
                     color: 'white',
                     fontSize: 25
                 }}>Log In</Text>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
+            <PillButton
+                text='Log In'
+                onPress={() => handleSubmit()}
+            />
         </SafeAreaView>
     )
 }
