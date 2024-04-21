@@ -66,7 +66,8 @@ public static class DeviceRoutes
                         t => new ConfigPillSchedule
                         {
                             SlotNumber = ps.PillSlot.SlotNumber,
-                            Time = TimeOfDay.FromTimeOnly(t)
+                            Time = TimeOfDay.FromTimeOnly(t),
+                            Quantity = ps.Quantity
                         }
                     )).ToArray()
             }).ToArray()

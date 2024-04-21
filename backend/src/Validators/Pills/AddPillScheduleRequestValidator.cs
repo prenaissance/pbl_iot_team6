@@ -9,5 +9,7 @@ public class AddPillScheduleRequestValidator : AbstractValidator<AddPillSchedule
     {
         RuleFor(x => x.Times)
             .NotEmpty();
+        RuleFor(x => x.Quantity)
+            .GreaterThan(0);
     }
 }

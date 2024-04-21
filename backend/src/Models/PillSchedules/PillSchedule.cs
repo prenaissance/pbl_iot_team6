@@ -6,6 +6,7 @@ public class PillSchedule
 {
     public Guid Id { get; set; }
     public List<TimeOnly> Times { get; set; } = [];
+    public int Quantity { get; set; }
     public Guid PillSlotId { get; set; }
     public PillSlot PillSlot { get; set; } = null!;
     public int ProfileId { get; set; }

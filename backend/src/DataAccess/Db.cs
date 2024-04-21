@@ -98,19 +98,22 @@ public class Db(DbContextOptions options) : DbContext(options)
                 Id = new Guid("b1b1b1b1-b1b1-b1b1-b1b1-b1b1b1b1b1b1"),
                 PillSlotId = PILLSLOT1_ID,
                 Times = [new(8, 0), new(20, 0)],
-                ProfileId = 1
+                ProfileId = 1,
+                Quantity = 1
             },
             new() {
                 Id = new Guid("b2b2b2b2-b2b2-b2b2-b2b2-b2b2b2b2b2b2"),
                 PillSlotId = PILLSLOT2_ID,
                 Times = [new(12, 0)],
-                ProfileId = 1
+                ProfileId = 1,
+                Quantity = 2
             },
             new () {
                 Id = new Guid("c1c1c1c1-c1c1-c1c1-c1c1-c1c1c1c1c1c1"),
                 PillSlotId = PILLSLOT1_ID,
                 Times = [new(7, 0), new(19, 0)],
-                ProfileId = 2
+                ProfileId = 2,
+                Quantity = 1
             },
         ]);
     }

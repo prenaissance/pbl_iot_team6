@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Dispenser.DataAccess;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Dispenser.Migrations
 {
     [DbContext(typeof(Db))]
-    partial class DbModelSnapshot : ModelSnapshot
+    [Migration("20240420100619_add_pillschedule_quantity")]
+    partial class add_pillschedule_quantity
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -58,7 +61,7 @@ namespace Dispenser.Migrations
                         new
                         {
                             Id = new Guid("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
-                            CreatedAt = new DateTime(2024, 4, 21, 8, 34, 17, 361, DateTimeKind.Utc).AddTicks(2532),
+                            CreatedAt = new DateTime(2024, 4, 20, 10, 6, 19, 177, DateTimeKind.Utc).AddTicks(6934),
                             DeviceId = new Guid("11111111-1111-1111-1111-111111111111"),
                             EventData = "{\r\n  \"slotNumber\": 1,\r\n  \"pillName\": \"Pill 1\"\r\n}",
                             EventType = "PillDispensed"
@@ -98,7 +101,7 @@ namespace Dispenser.Migrations
                             Id = new Guid("b1b1b1b1-b1b1-b1b1-b1b1-b1b1b1b1b1b1"),
                             PillSlotId = new Guid("aca05c8c-b4f9-4716-ab98-27fa259bc114"),
                             ProfileId = 1,
-                            Quantity = 1,
+                            Quantity = 0,
                             Times = new List<TimeOnly> { new TimeOnly(8, 0, 0), new TimeOnly(20, 0, 0) }
                         },
                         new
@@ -106,7 +109,7 @@ namespace Dispenser.Migrations
                             Id = new Guid("b2b2b2b2-b2b2-b2b2-b2b2-b2b2b2b2b2b2"),
                             PillSlotId = new Guid("c7bb0dce-793d-48be-8ede-8f01ffd5615a"),
                             ProfileId = 1,
-                            Quantity = 2,
+                            Quantity = 0,
                             Times = new List<TimeOnly> { new TimeOnly(12, 0, 0) }
                         },
                         new
@@ -114,7 +117,7 @@ namespace Dispenser.Migrations
                             Id = new Guid("c1c1c1c1-c1c1-c1c1-c1c1-c1c1c1c1c1c1"),
                             PillSlotId = new Guid("aca05c8c-b4f9-4716-ab98-27fa259bc114"),
                             ProfileId = 2,
-                            Quantity = 1,
+                            Quantity = 0,
                             Times = new List<TimeOnly> { new TimeOnly(7, 0, 0), new TimeOnly(19, 0, 0) }
                         });
                 });
@@ -315,7 +318,7 @@ namespace Dispenser.Migrations
                                 new
                                 {
                                     ProfileId = 1,
-                                    CreatedAt = new DateTime(2024, 4, 21, 8, 34, 17, 360, DateTimeKind.Utc).AddTicks(8207),
+                                    CreatedAt = new DateTime(2024, 4, 20, 10, 6, 19, 177, DateTimeKind.Utc).AddTicks(4479),
                                     Rfid = new byte[] { 1, 2, 3, 4 }
                                 });
                         });

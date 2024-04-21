@@ -4,4 +4,5 @@ public record PillScheduleResponse
 {
     public required Guid Id { get; init; }
     public required IList<TimeOfDay> Times { get; init; }
+    public required int Quantity { get; init; }
 }

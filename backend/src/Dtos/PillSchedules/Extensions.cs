@@ -9,7 +9,8 @@ public static class Extensions
         new()
         {
             Id = pillSchedule.Id,
-            Times = pillSchedule.Times.Select(TimeOfDay.FromTimeOnly).ToArray()
+            Times = pillSchedule.Times.Select(TimeOfDay.FromTimeOnly).ToArray(),
+            Quantity = pillSchedule.Quantity
         };
 
     public static PillSlotResponse ToPillSlotResponse(this PillSlot pillSlot) =>
