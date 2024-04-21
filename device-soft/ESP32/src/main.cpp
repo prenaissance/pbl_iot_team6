@@ -18,6 +18,9 @@
 #include <MFRC522.h>
 #include <SPI.h>
 
+#include <NTPClient.h>
+#include <WiFiUdp.h>
+
 #include "drivers/dispenserDriver.h"
 #include "drivers/lcdDriver.h"
 #include "drivers/ledDriver.h"
@@ -55,6 +58,7 @@ static LcdDriver ld(&lcd);
 
 Servo motor;
 static DispenserDriver dd(&motor);
+static DispenceSequence ds(&dd);
 
 static LedManager lm;
 
@@ -63,19 +67,19 @@ static LedManager lm;
 
 // Use www.uuidgenerator.net to get new UUIDs
 
-#define SERVICE_UUID            "975b7600-ced6-4b3a-a4af-be038d43b8c9"
+#define SERVICE_UUID "975b7600-ced6-4b3a-a4af-be038d43b8c9"
 
 #define UPDATE_SIGNAL_CHAR_UUID "f62206df-79d6-4eb9-bfc8-72036bf1e3b3"
 #define UPDATE_SIGNAL_CHAR_DESC "Client sets this bool 'flag' to call local schedule updating"
 
-#define RFID_REQUEST_CHAR_UUID  "30e27b63-3ee2-486a-a14f-e020be483ada"
-#define RFID_REQUEST_CHAR_DESC  "Client uses this characteristic to request and recieve the RFID tag data"
+#define RFID_REQUEST_CHAR_UUID "30e27b63-3ee2-486a-a14f-e020be483ada"
+#define RFID_REQUEST_CHAR_DESC "Client uses this characteristic to request and recieve the RFID tag data"
 
-#define USER_ID_CHAR_UUID       "a4bd67ef-d298-460e-88fd-2857885b0724"
-#define USER_ID_CHAR_DESC       "ID to get from client when connecting"
+#define USER_ID_CHAR_UUID "a4bd67ef-d298-460e-88fd-2857885b0724"
+#define USER_ID_CHAR_DESC "ID to get from client when connecting"
 
-#define DEVICE_ID_CHAR_UUID     "5a9bec66-0f89-4383-b779-c3b9162d2814"
-#define DEVICE_ID_CHAR_DESC     "ID to send to client when connecting"
+#define DEVICE_ID_CHAR_UUID "5a9bec66-0f89-4383-b779-c3b9162d2814"
+#define DEVICE_ID_CHAR_DESC "ID to send to client when connecting"
 
 StaticJsonDocument<1024> schedule;
 
@@ -100,18 +104,31 @@ static bool connectedClient = false;
 static bool UpdateRequest = false;
 static bool RFIDRequest = false;
 
-std::string uint8_tToHexString(const uint8_t*, size_t);
-std::string uuid4Format(const std::string&);
+std::string uint8_tToHexString(const uint8_t *, size_t);
+std::string uuid4Format(const std::string &);
 
-class MyServerCallbacks : public BLEServerCallbacks {
-    void onConnect(BLEServer *pServer) {
+const char *ntpServer = "pool.ntp.org";
+const int utcOffset_sec = 3600 * 3;
+
+int currTime[2];
+
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP, ntpServer, utcOffset_sec);
+
+void getTime();
+
+class MyServerCallbacks : public BLEServerCallbacks
+{
+    void onConnect(BLEServer *pServer)
+    {
         connectedClient = true;
         Serial.println("A client has connected!");
 
         pDeviceIDChar->setValue(uint8_tToHexString(deviceIdBytes, 16));
     }
 
-    void onDisconnect(BLEServer *pServer) {
+    void onDisconnect(BLEServer *pServer)
+    {
         connectedClient = false;
         Serial.println("The client has disconnected!");
 
@@ -119,21 +136,30 @@ class MyServerCallbacks : public BLEServerCallbacks {
     }
 };
 
-class CharacteristicsCallbacks : public BLECharacteristicCallbacks {
-    void onWrite(BLECharacteristic *pCharacteristic) {
-        if (pCharacteristic == pUserIDChar) {
+class CharacteristicsCallbacks : public BLECharacteristicCallbacks
+{
+    void onWrite(BLECharacteristic *pCharacteristic)
+    {
+        if (pCharacteristic == pUserIDChar)
+        {
             userId = pCharacteristic->getValue();
-        } else if (pCharacteristic == pUpdateSignChar) {
+        }
+        else if (pCharacteristic == pUpdateSignChar)
+        {
             UpdateRequest = true;
-        } else if (pCharacteristic == pRFIDReqChar) {
+        }
+        else if (pCharacteristic == pRFIDReqChar)
+        {
             RFIDRequest = true;
         }
     }
 };
 
 void updateSchedule();
+void checkSchedule(String);
 
-void setup() {
+void setup()
+{
     Serial.begin(BAUD_RATE);
 
     // Generate an UUID for the device
@@ -163,25 +189,21 @@ void setup() {
 
     pUpdateSignChar = pService->createCharacteristic(
         UPDATE_SIGNAL_CHAR_UUID,
-        BLECharacteristic::PROPERTY_WRITE
-    );
+        BLECharacteristic::PROPERTY_WRITE);
 
     pRFIDReqChar = pService->createCharacteristic(
         RFID_REQUEST_CHAR_UUID,
         BLECharacteristic::PROPERTY_WRITE |
-        BLECharacteristic::PROPERTY_NOTIFY
-    );
+            BLECharacteristic::PROPERTY_NOTIFY);
 
     pUserIDChar = pService->createCharacteristic(
         USER_ID_CHAR_UUID,
-        BLECharacteristic::PROPERTY_WRITE
-    );
+        BLECharacteristic::PROPERTY_WRITE);
 
     pDeviceIDChar = pService->createCharacteristic(
         DEVICE_ID_CHAR_UUID,
         BLECharacteristic::PROPERTY_READ |
-        BLECharacteristic::PROPERTY_NOTIFY
-    );
+            BLECharacteristic::PROPERTY_NOTIFY);
 
     // Ass dome info descriptors for all the characteristics
 
@@ -224,7 +246,8 @@ void setup() {
     WiFi.begin(ssid, password);
     Serial.print("Connecting to WiFi");
 
-    while (WiFi.status() != WL_CONNECTED) {
+    while (WiFi.status() != WL_CONNECTED)
+    {
         Serial.print(".");
         delay(500);
     }
@@ -235,60 +258,115 @@ void setup() {
     lm.init(LedDriver(LED2_R, LED2_G), 1);
 
     // rm.init(&rfid);
+
+    timeClient.begin();
+    updateSchedule();
 }
 
-void loop() {
-    updateSchedule();
+void loop()
+{
+    checkSchedule("AQIDBA==");
+
     delay(5000);
 
     // rm.manageUid();
 }
 
-void updateSchedule() {
-    if ((WiFi.status() == WL_CONNECTED)) {
+void updateSchedule()
+{
+    if ((WiFi.status() == WL_CONNECTED))
+    {
         HTTPClient client;
 
         char url[100] = "https://";
         strcat(url, scheduleServerHost);
         strcat(url, "/api/devices/");
-        strcat(url, deviceIdBase64.c_str());    
+        strcat(url, deviceIdBase64.c_str());
         strcat(url, "/config");
 
         client.begin(url);
         int httpCode = client.GET();
 
-        if (httpCode > 0) {
+        if (httpCode > 0)
+        {
             String payload = client.getString();
             DeserializationError error = deserializeJson(schedule, payload);
 
-            if (error) {
+            if (error)
+            {
                 Serial.print(F("deserializeJson() failed: "));
                 Serial.println(error.c_str());
                 return;
             }
 
             Serial.println("Local schedule successfully updated!");
-        } else {
+        }
+        else
+        {
             Serial.println("Error on HTTP request");
         }
-    } else {
+
+        client.end();
+    }
+    else
+    {
         Serial.println("No WiFi connection!");
     }
 }
 
-std::string uint8_tToHexString(const uint8_t* data, size_t len) {
+void checkSchedule(String userRFID)
+{
+    getTime();
+
+    JsonArray profiles = schedule["profiles"];
+    for (JsonObject profile : profiles)
+    {
+        const char *rfid = profile["rfid"];
+
+        if (rfid != nullptr && userRFID.equals(rfid))
+        {
+            const char *username = profile["username"];
+
+            Serial.print("Username associated with RFID ");
+            Serial.print(userRFID);
+            Serial.print(" is: ");
+            Serial.println(username);
+
+            JsonArray pillSchedules = profile["pillSchedules"];
+            for (JsonObject schedule : pillSchedules)
+            {
+                int hour = schedule["time"]["hour"];
+                int minute = schedule["time"]["minutes"];
+                int slotNumber = schedule["slotNumber"];
+
+                if (abs((hour * 60 + minute) - (currTime[0] * 60 + currTime[1])) < 30)
+                {
+                    Serial.println("Dispence:");
+                    Serial.println(String(hour) + ':' + String(minute) + " | slot: " + String(slotNumber));
+                }
+            }
+
+            return;
+        }
+    }
+}
+
+std::string uint8_tToHexString(const uint8_t *data, size_t len)
+{
     std::stringstream ss;
     ss << std::hex;
 
-    for (size_t i = 0; i < len; ++i) {
+    for (size_t i = 0; i < len; ++i)
+    {
         ss << std::setw(2) << std::setfill('0') << static_cast<int>(data[i]);
     }
 
     return ss.str();
 }
 
-std::string uuid4Format(const std::string& uuid_str) {
-    std::string formatted_uuid = 
+std::string uuid4Format(const std::string &uuid_str)
+{
+    std::string formatted_uuid =
         uuid_str.substr(0, 8) + "-" +
         uuid_str.substr(8, 4) + "-" +
         uuid_str.substr(12, 4) + "-" +
@@ -296,4 +374,11 @@ std::string uuid4Format(const std::string& uuid_str) {
         uuid_str.substr(20);
 
     return formatted_uuid;
+}
+
+void getTime()
+{
+    timeClient.update();
+    currTime[0] = timeClient.getHours();
+    currTime[1] = timeClient.getMinutes();
 }
