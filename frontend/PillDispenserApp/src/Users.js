@@ -87,7 +87,6 @@ function Users({navigation}){
                     }}    
                 />
             </TouchableOpacity>
-                <BottomBar/>
         </View>
     )
 }

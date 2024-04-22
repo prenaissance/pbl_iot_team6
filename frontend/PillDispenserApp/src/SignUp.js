@@ -3,15 +3,16 @@ import { SafeAreaView, View, Text, Button, TextInput, TouchableOpacity } from 'r
 import url from '../shared/variables';
 import PillButton from '../shared/pill-button';
 import {getData, storeData} from '../shared/storage-utils.js'
-function LogIn(){
+function SignUp(){
     const handleSubmit = async() => {
         console.log(await getData('token'));
         const dataToSend = {
             username: username,
             password: password,
+            deviceId: "22ad34c6-2ff2-4dcf-a826-1994da215c8b"
         }
         console.log("awaiting...");
-        await fetch(url+'api/authentication/login', {
+        await fetch(url+'api/authentication/register', {
             method: 'POST',
             headers: {
                 Accept: 'application/json',
@@ -90,4 +91,4 @@ function LogIn(){
     )
 }
 
-export default LogIn;
+export default SignUp;

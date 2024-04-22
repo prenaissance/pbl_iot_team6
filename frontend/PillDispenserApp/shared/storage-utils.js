@@ -7,3 +7,9 @@ export const storeData = async(key, data) => {
 export const getData = async(key) =>{
     return await AsyncStorage.getItem(key);
 }
+
+export const getToken = async() => {
+    token = await getData('token');
+    return token;
+  }
+  

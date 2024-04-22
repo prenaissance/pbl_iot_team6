@@ -13,7 +13,10 @@ function Tab(props){
     }
     return(
         <TouchableOpacity
-            style={{width:375}}
+            style={{
+                width:375,
+            }}
+            onPress={props.onPress}
         >
             <View
                 style={{
