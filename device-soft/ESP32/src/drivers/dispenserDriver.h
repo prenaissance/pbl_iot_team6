@@ -47,4 +47,6 @@ public:
         sequence[seqLen] = (cNum == 2) ? -1 : cNum;
         seqLen++;
     }
+
+    
 };
