@@ -51,7 +51,6 @@ const char *scheduleServerHost = "dispenser-backend.onrender.com";
 
 uint8_t deviceIdBytes[16];
 std::string deviceIdBase64 = "";
-std::string userId = "";
 
 LiquidCrystal_I2C lcd(I2C_ADDR, LCD_COLUMNS, LCD_LINES);
 static LcdDriver ld(&lcd);
@@ -62,8 +61,8 @@ static DispenceSequence ds(&dd);
 
 static LedManager lm;
 
-// Rfid rfid(SS_PIN, RST_PIN);
-// static RfidDriver rm;
+Rfid rfid(SS_PIN, RST_PIN);
+static RfidDriver rm;
 
 // Use www.uuidgenerator.net to get new UUIDs
 
@@ -75,9 +74,6 @@ static LedManager lm;
 #define RFID_REQUEST_CHAR_UUID "30e27b63-3ee2-486a-a14f-e020be483ada"
 #define RFID_REQUEST_CHAR_DESC "Client uses this characteristic to request and recieve the RFID tag data"
 
-#define USER_ID_CHAR_UUID "a4bd67ef-d298-460e-88fd-2857885b0724"
-#define USER_ID_CHAR_DESC "ID to get from client when connecting"
-
 #define DEVICE_ID_CHAR_UUID "5a9bec66-0f89-4383-b779-c3b9162d2814"
 #define DEVICE_ID_CHAR_DESC "ID to send to client when connecting"
 
@@ -88,12 +84,10 @@ BLEService *pService = NULL;
 
 BLECharacteristic *pUpdateSignChar = NULL;
 BLECharacteristic *pRFIDReqChar = NULL;
-BLECharacteristic *pUserIDChar = NULL;
 BLECharacteristic *pDeviceIDChar = NULL;
 
 BLEDescriptor *pUpdateSignDesc = NULL;
 BLEDescriptor *pRFIDReqDesc = NULL;
-BLEDescriptor *pUserIDDesc = NULL;
 BLEDescriptor *pDeviceIDDesc = NULL;
 
 BLE2902 *pRFIDReqBLE2902 = NULL;
@@ -122,7 +116,7 @@ class MyServerCallbacks : public BLEServerCallbacks
     void onConnect(BLEServer *pServer)
     {
         connectedClient = true;
-        Serial.println("A client has connected!");
+        Serial.println("A client has connected");
 
         pDeviceIDChar->setValue(uint8_tToHexString(deviceIdBytes, 16));
     }
@@ -130,9 +124,7 @@ class MyServerCallbacks : public BLEServerCallbacks
     void onDisconnect(BLEServer *pServer)
     {
         connectedClient = false;
-        Serial.println("The client has disconnected!");
-
-        userId = "";
+        Serial.println("The client has disconnected");
     }
 };
 
@@ -140,11 +132,7 @@ class CharacteristicsCallbacks : public BLECharacteristicCallbacks
 {
     void onWrite(BLECharacteristic *pCharacteristic)
     {
-        if (pCharacteristic == pUserIDChar)
-        {
-            userId = pCharacteristic->getValue();
-        }
-        else if (pCharacteristic == pUpdateSignChar)
+        if (pCharacteristic == pUpdateSignChar)
         {
             UpdateRequest = true;
         }
@@ -162,13 +150,45 @@ void setup()
 {
     Serial.begin(BAUD_RATE);
 
-    // Generate an UUID for the device
+    Serial.println("\n\nSetup logs:\n");
+
+    // Device's UUID
+
+    Serial.println("I. Device uuid generation");
+
     esp_fill_random(deviceIdBytes, sizeof(deviceIdBytes));
     deviceIdBase64 = uuid4Format(uint8_tToHexString(deviceIdBytes, 16));
 
     deviceIdBase64 = "11111111-1111-1111-1111-111111111111";
 
+    Serial.print("--- Generated uuid: ");
+    Serial.println(deviceIdBase64.c_str());
+    Serial.println();
+
+    // WiFi
+
+    Serial.print("II. ");
+
+    WiFi.begin(ssid, password);
+    Serial.print("Connecting to WiFi ");
+
+    while (WiFi.status() != WL_CONNECTED)
+    {
+        Serial.print(".");
+        delay(500);
+    }
+
+    Serial.print("\n--- Successfully connected to ");
+    Serial.println(ssid);
+
+    // BLE
+
+    Serial.println("III. BLE initialization...");
+
     BLEDevice::init("ESP32");
+
+    Serial.print("* BLE device intialized - ");
+    Serial.println("ESP32");
 
     /*
     The smartphone app initiates the connection,
@@ -179,7 +199,12 @@ void setup()
     pServer = BLEDevice::createServer();
     pServer->setCallbacks(new MyServerCallbacks());
 
+    Serial.println("* BLE server created");
+
     pService = pServer->createService(SERVICE_UUID);
+
+    Serial.print("* BLE service created: ");
+    Serial.println(SERVICE_UUID);
 
     /*
     ~ BLECharacteristic::PROPERTY_WRITE - The characteristic supports writing by the client
@@ -196,16 +221,20 @@ void setup()
         BLECharacteristic::PROPERTY_WRITE |
             BLECharacteristic::PROPERTY_NOTIFY);
 
-    pUserIDChar = pService->createCharacteristic(
-        USER_ID_CHAR_UUID,
-        BLECharacteristic::PROPERTY_WRITE);
-
     pDeviceIDChar = pService->createCharacteristic(
         DEVICE_ID_CHAR_UUID,
         BLECharacteristic::PROPERTY_READ |
             BLECharacteristic::PROPERTY_NOTIFY);
 
-    // Ass dome info descriptors for all the characteristics
+    Serial.println("* Characteristics setup:");
+    Serial.print("   ");
+    Serial.println(UPDATE_SIGNAL_CHAR_UUID);
+    Serial.print("   ");
+    Serial.println(RFID_REQUEST_CHAR_UUID);
+    Serial.print("   ");
+    Serial.println(DEVICE_ID_CHAR_UUID);
+
+    // Add some info descriptors for all the characteristics
 
     pUpdateSignDesc = new BLEDescriptor((uint16_t)0x2901);
     pUpdateSignDesc->setValue(UPDATE_SIGNAL_CHAR_DESC);
@@ -215,13 +244,17 @@ void setup()
     pRFIDReqDesc->setValue(RFID_REQUEST_CHAR_DESC);
     pRFIDReqChar->addDescriptor(pRFIDReqDesc);
 
-    pUserIDDesc = new BLEDescriptor((uint16_t)0x2901);
-    pUserIDDesc->setValue(USER_ID_CHAR_DESC);
-    pUserIDChar->addDescriptor(pUserIDDesc);
-
     pDeviceIDDesc = new BLEDescriptor((uint16_t)0x2901);
     pDeviceIDDesc->setValue(DEVICE_ID_CHAR_DESC);
     pDeviceIDChar->addDescriptor(pDeviceIDDesc);
+
+    Serial.println("* Info descriptors attached:");
+    Serial.print("   ");
+    Serial.println(UPDATE_SIGNAL_CHAR_DESC);
+    Serial.print("   ");
+    Serial.println(RFID_REQUEST_CHAR_DESC);
+    Serial.print("   ");
+    Serial.println(DEVICE_ID_CHAR_DESC);
 
     /*
     For "notifications" to work properly it is necessary to
@@ -236,40 +269,49 @@ void setup()
     pDeviceIDBLE2902->setNotifications(true);
     pDeviceIDChar->addDescriptor(pDeviceIDBLE2902);
 
-    pService->start();
-    pServer->getAdvertising()->start();
+    Serial.println("* BLE2902 descriptors attached:");
+    Serial.print("   ");
+    Serial.println(RFID_REQUEST_CHAR_UUID);
+    Serial.print("   ");
+    Serial.println(DEVICE_ID_CHAR_UUID);
 
     pUpdateSignChar->setCallbacks(new CharacteristicsCallbacks());
     pRFIDReqChar->setCallbacks(new CharacteristicsCallbacks());
-    pUserIDChar->setCallbacks(new CharacteristicsCallbacks());
 
-    WiFi.begin(ssid, password);
-    Serial.print("Connecting to WiFi");
+    Serial.println("* Characteristics' callbacks setup");
 
-    while (WiFi.status() != WL_CONNECTED)
-    {
-        Serial.print(".");
-        delay(500);
-    }
+    pService->start();
+    pServer->getAdvertising()->start();
+
+    Serial.println("--- Service & server advertisement started successfully\n");
 
     motor.attach(SERVO_PIN);
+
+    Serial.println("IV. Motor pinout set up successfully\n");
 
     lm.init(LedDriver(LED1_R, LED1_G), 0);
     lm.init(LedDriver(LED2_R, LED2_G), 1);
 
-    // rm.init(&rfid);
+    Serial.println("V. LED indication system initialized successfully\n");
+
+    rm.init(&rfid);
+
+    Serial.println("VI. RFID manager initialized successfully\n");
 
     timeClient.begin();
-    updateSchedule();
+
+    Serial.println("VII. Time client started successfully\n");
+
+    Serial.println("!Initialization finished!");
 }
 
 void loop()
 {
-    checkSchedule("AQIDBA==");
+    // checkSchedule("AQIDBA==");
 
-    delay(5000);
+    // delay(5000);
 
-    // rm.manageUid();
+    // // rm.manageUid();
 }
 
 void updateSchedule()
