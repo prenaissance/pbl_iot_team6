@@ -4,8 +4,8 @@ import { NavigationAction } from '@react-navigation/native';
 import url from '../shared/variables.js'
 import Tab from '../shared/tab.js'
 import SearchBar from '../shared/search-bar.js';
-import BottomBar from '../shared/bottom-bar.js';
 import { getData } from '../shared/storage-utils.js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
 function Users({navigation}){
@@ -55,6 +55,17 @@ function Users({navigation}){
             <Text>
                 USERS
             </Text>
+            <TouchableOpacity onPress={async() =>  {
+                    await AsyncStorage.removeItem('token');
+                    navigation.navigate("Login");
+                }}>
+            <Text
+                style={{color:'red'}}
+            >
+                Log Out
+            </Text>
+            </TouchableOpacity>
+            
 
             <SearchBar/>
             {loading 

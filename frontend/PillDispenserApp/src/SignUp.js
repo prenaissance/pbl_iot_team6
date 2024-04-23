@@ -3,7 +3,7 @@ import { SafeAreaView, View, Text, Button, TextInput, TouchableOpacity } from 'r
 import url from '../shared/variables';
 import PillButton from '../shared/pill-button';
 import {getData, storeData} from '../shared/storage-utils.js'
-function SignUp(){
+function SignUp({navigation}){
     const handleSubmit = async() => {
         console.log(await getData('token'));
         const dataToSend = {
@@ -62,29 +62,13 @@ function SignUp(){
             />
             <Text style={{
                 marginTop:15
-            }}>Don't have an account? Sign Up</Text>
+            }}>Already have an account?</Text>
+            <TouchableOpacity onPress={() => navigation.navigate("Login")}>
+                <Text style={{color:'#40BAFF'}}>Login</Text>
+                </TouchableOpacity>
 
-            {/* <TouchableOpacity
-                style={{
-                    width:300,
-                    height: 73, 
-                    borderRadius: 10,
-                    backgroundColor: '#00C780',
-                    color: 'white',
-                    justifyContent: 'center',
-                    alignContent: 'center',
-                    marginTop: 265
-                }}
-                onPress={() => handleSubmit()}
-            >
-                <Text style={{
-                    textAlign: 'center',
-                    color: 'white',
-                    fontSize: 25
-                }}>Log In</Text>
-            </TouchableOpacity> */}
             <PillButton
-                text='Log In'
+                text='Sign Up'
                 onPress={() => handleSubmit()}
             />
         </SafeAreaView>

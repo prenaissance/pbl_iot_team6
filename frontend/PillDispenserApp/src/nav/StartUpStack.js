@@ -11,7 +11,9 @@ function StartUpStack(){
             screenOptions={{headerShown: false}}
         >
             {/* <Stack.Screen name="GetStarted" component={GetStarted} /> */}
-            <Stack.Screen name="SignUp" component={LogIn} />
+            <Stack.Screen name="SignUp" component={SignUp} />
+            <Stack.Screen name="Login" component={LogIn} />
+
         </Stack.Navigator>
     )
 }

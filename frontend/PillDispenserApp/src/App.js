@@ -5,7 +5,7 @@
  * @format
  */
 
-import React from 'react';
+import React, {useState, useEffect} from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -38,18 +38,19 @@ function App (){
   const backgroundStyle = {
     backgroundColor: isDarkMode ? Colors.darker : Colors.lighter
   }
-
+  const [loginStatusChanged, setLoginStatusChanged] = useState(false);
+  const [token, setToken] = useState('');
   
+  useEffect(async () => {
+    setToken(getToken);
+    console.log('APP TOKEN: '+token);
+  }, [loginStatusChanged]);
+
+
   return(
-    // <View>
-    //   <Button title='Led One On' />
-    //   <Button title='Led Two On' />
-    //   <Button title='Led Three On' />
-    // </View>
-    // <LogIn/>
     <NavigationContainer>
       {
-        getToken == null ? (
+        token == null ? (
           <StartUpStack/>
         ) : (
           <Tab.Navigator
