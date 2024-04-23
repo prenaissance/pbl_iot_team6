@@ -48,5 +48,8 @@ public:
         seqLen++;
     }
 
-    
+    bool checkSeq()
+    {
+        return seqLen > 0;
+    }
 };

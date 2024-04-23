@@ -21,16 +21,13 @@
 #include <NTPClient.h>
 #include <WiFiUdp.h>
 
-#include <Preferences.h>
+#include <SPIFFS.h>
 
 #include "drivers/dispenserDriver.h"
 #include "drivers/lcdDriver.h"
 #include "drivers/ledDriver.h"
 #include "drivers/pickupSys.h"
 #include "drivers/rfidDriver.h"
-
-#define DEVICE_UUID_NVSK "deviceIdBase64"
-#define DEVICE_UUID_SIZE 16
 
 #define BAUD_RATE 9600
 
@@ -54,7 +51,7 @@ const char *password = "12345768";
 
 const char *scheduleServerHost = "dispenser-backend.onrender.com";
 
-uint8_t deviceIdBytes[DEVICE_UUID_SIZE];
+uint8_t deviceIdBytes[16];
 std::string deviceIdBase64 = "";
 
 LiquidCrystal_I2C lcd(I2C_ADDR, LCD_COLUMNS, LCD_LINES);
@@ -100,8 +97,7 @@ BLE2902 *pDeviceIDBLE2902 = NULL;
 
 static bool connectedClient = false;
 
-static bool UpdateRequest = false;
-static bool RFIDRequest = false;
+static bool updateRequest = false;
 
 std::string uint8_tToHexString(const uint8_t *, size_t);
 std::string uuid4Format(const std::string &);
@@ -113,6 +109,9 @@ int currTime[2];
 
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, ntpServer, utcOffset_sec);
+
+const char *idFilePath = "/deviceId.bin";
+const size_t deviceIdSize = 16;
 
 void getTime();
 
@@ -139,11 +138,11 @@ class CharacteristicsCallbacks : public BLECharacteristicCallbacks
     {
         if (pCharacteristic == pUpdateSignChar)
         {
-            UpdateRequest = true;
+            updateRequest = true;
         }
         else if (pCharacteristic == pRFIDReqChar)
         {
-            RFIDRequest = true;
+            RFID_request = true;
         }
     }
 };
@@ -155,34 +154,17 @@ void setup()
 {
     Serial.begin(BAUD_RATE);
 
-    Preferences preferences;
-    preferences.begin("device-preferences", false);
-
     Serial.println("\n\nSetup logs:\n");
 
     // Device's UUID
 
     Serial.println("I. Device uuid setup");
 
-    if (preferences.getBytesLength(DEVICE_UUID_NVSK) == DEVICE_UUID_SIZE)
-    {
-        preferences.getBytes(DEVICE_UUID_NVSK, deviceIdBytes, DEVICE_UUID_SIZE);
-
-        Serial.print("Device UUID - retrieved from NVS: ");
-    }
-    else
-    {
-        esp_fill_random(deviceIdBytes, sizeof(deviceIdBytes));
-        preferences.putBytes(DEVICE_UUID_NVSK, deviceIdBytes, DEVICE_UUID_SIZE);
-
-        Serial.println("Device UUID - generated: ");
-    }
-
-    preferences.end();
-
+    esp_fill_random(deviceIdBytes, sizeof(deviceIdBytes));
     deviceIdBase64 = uuid4Format(uint8_tToHexString(deviceIdBytes, 16));
     deviceIdBase64 = "11111111-1111-1111-1111-111111111111";
 
+    Serial.print("Device UUID generated: ");
     Serial.println(deviceIdBase64.c_str());
     Serial.println();
 
@@ -331,11 +313,27 @@ void setup()
 
 void loop()
 {
-    checkSchedule("AQIDBA==");
+    if (ds.checkSeq())
+    {
+        ds.dispence();
+    }
+    else if (pRFIDReqChar->getValue().size() != 0 && ...)
+    {
+        // TODO (by Max):
+        // check if RFID tag read - checkSchedule(UUID);
+    }
+    else if (updateRequest)
+    {
+        updateSchedule();
+        updateRequest = false;
+    }
+    else if (pRFIDReqChar->getValue().size() == 0)
+    {
+        // TODO (by Max):
+        // read RFID and pRFIDReqChar->setValue(RIFD[:10])
+    }
 
-    delay(10000);
-
-    // // rm.manageUid();
+    ld.update();
 }
 
 void updateSchedule()
