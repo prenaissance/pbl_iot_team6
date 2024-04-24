@@ -5,7 +5,9 @@ export const storeData = async(key, data) => {
 }
 
 export const getData = async(key) =>{
-    return await AsyncStorage.getItem(key);
+    return await AsyncStorage.getItem(key).then(
+        (response) => { return response; }
+    );
 }
 
 export const getToken = async() => {

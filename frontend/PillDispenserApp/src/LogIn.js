@@ -3,7 +3,9 @@ import { SafeAreaView, View, Text, Button, TextInput, TouchableOpacity } from 'r
 import url from '../shared/variables';
 import PillButton from '../shared/pill-button';
 import {getData, storeData} from '../shared/storage-utils.js'
+import { useLogin } from './context/LoginProvider.js';
 function LogIn({navigation}){
+    const {setIsLoggedIn} = useLogin();
     const handleSubmit = async() => {
         console.log(await getData('token'));
         const dataToSend = {
@@ -21,6 +23,7 @@ function LogIn({navigation}){
         }).then(response => response.json()).then(
             data => {
                 storeData('token', data['token']);
+                setIsLoggedIn(true);
                 console.log('success!')
             }
         ).catch(error => {

@@ -1,17 +1,19 @@
 import React , {useEffect, useState} from 'react';
-import { SafeAreaView, View, Text, Image, TextInput, TouchableOpacity, FlatList, ActivityIndicator } from 'react-native';
+import { SafeAreaView, View, Text, Image, TextInput, TouchableOpacity, FlatList, ActivityIndicator  } from 'react-native';
 import { NavigationAction } from '@react-navigation/native';
 import url from '../shared/variables.js'
 import Tab from '../shared/tab.js'
 import SearchBar from '../shared/search-bar.js';
-import { getData } from '../shared/storage-utils.js';
+import { getData, storeData } from '../shared/storage-utils.js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useLogin } from './context/LoginProvider.js';
 
 
 function Users({navigation}){
-
+    const {setIsLoggedIn} = useLogin();
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [loginChanged, setLoginChanged] = useState(false);
     const fetchUsers = async() =>{
         const token = await getData('token');
         console.log('awaiting...');
@@ -57,7 +59,7 @@ function Users({navigation}){
             </Text>
             <TouchableOpacity onPress={async() =>  {
                     await AsyncStorage.removeItem('token');
-                    navigation.navigate("Login");
+                    setIsLoggedIn(false);
                 }}>
             <Text
                 style={{color:'red'}}
