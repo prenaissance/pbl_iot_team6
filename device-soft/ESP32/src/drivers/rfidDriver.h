@@ -3,40 +3,34 @@
 
 #define MAX_KEY_SIZE 6
 
-class Rfid
-{
-private:
-    MFRC522 rfid;
+class Rfid {
+   private:
+    MFRC522 *rfid;
     MFRC522::MIFARE_Key key;
 
-public:
-    Rfid() : rfid(0, 0) {}
+   public:
+    void init(int ssPin, int rstPin) {
+        rfid = new MFRC522(ssPin, rstPin);
+        SPI.begin();       // Init SPI bus
+        rfid->PCD_Init();  // Init MFRC522
 
-    Rfid(int ssPin, int rstPin) : rfid(ssPin, rstPin)
-    {
-        SPI.begin();     // Init SPI bus
-        rfid.PCD_Init(); // Init MFRC522
-
-        for (byte i = 0; i < MAX_KEY_SIZE; ++i)
-        {
+        for (byte i = 0; i < MAX_KEY_SIZE; ++i) {
             key.keyByte[i] = 0xFF;
         }
     }
 
-    MFRC522 getRfid() { return rfid; }
+    MFRC522 *getRfid() { return rfid; }
 };
 
-class RfidDriver
-{
-private:
+class RfidDriver {
+   private:
     Rfid *instance;
+    String chachedUid;
 
-    String convertHexToString(byte *buffer, byte bufferSize)
-    {
+    String convertHexToString(byte *buffer, byte bufferSize) {
         String output = "";
 
-        for (byte i = 0; i < bufferSize; ++i)
-        {
+        for (byte i = 0; i < bufferSize; ++i) {
             char hexBuff[3];
             sprintf(hexBuff, "%02X", buffer[i]);
             output += hexBuff;
@@ -45,30 +39,32 @@ private:
         return output;
     }
 
-public:
-    void init(Rfid *driverInstance) { instance = driverInstance; }
+   public:
+    void init(Rfid *instance) { this->instance = instance; }
 
-    void manageUid()
-    {
-        MFRC522 rfid = instance->getRfid();
+    bool isNewCardRead() {
+        MFRC522 *rfid = instance->getRfid();
+        return rfid->PICC_IsNewCardPresent() && rfid->PICC_ReadCardSerial();
+    }
 
-        // Reset the loop if no new card present on the sensor/reader. This
-        // saves the entire process when idle.
-        if (!rfid.PICC_IsNewCardPresent())
-            return;
-
-        // Verify if the NUID has been readed
-        if (!rfid.PICC_ReadCardSerial())
-            return;
+    void readUid() {
+        MFRC522 *rfid = instance->getRfid();
 
         // Record UID
-        String uidHex = convertHexToString(rfid.uid.uidByte, rfid.uid.size);
-        Serial.println(uidHex);
+        chachedUid = convertHexToString(rfid->uid.uidByte, rfid->uid.size);
 
         // Halt PICC
-        rfid.PICC_HaltA();
+        rfid->PICC_HaltA();
 
         // Stop encryption on PCD
-        rfid.PCD_StopCrypto1();
+        rfid->PCD_StopCrypto1();
+    }
+
+    String getCachedUid() {
+        return chachedUid;
+    }
+
+    void clearCachedUid() {
+        chachedUid = "";
     }
 };

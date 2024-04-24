@@ -1,27 +1,21 @@
 #include <Arduino.h>
-
-#include <sstream>
-#include <iomanip>
-
-#include <ESP32Servo.h>
-#include <LiquidCrystal_I2C.h>
-
+#include <ArduinoJson.h>
+#include <BLE2902.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
-#include <BLE2902.h>
-
+#include <ESP32Servo.h>
 #include <HTTPClient.h>
-#include <WiFi.h>
-#include <ArduinoJson.h>
-
+#include <LiquidCrystal_I2C.h>
 #include <MFRC522.h>
-#include <SPI.h>
-
 #include <NTPClient.h>
+#include <SPI.h>
+#include <SPIFFS.h>
+#include <WiFi.h>
 #include <WiFiUdp.h>
 
-#include <SPIFFS.h>
+#include <iomanip>
+#include <sstream>
 
 #include "drivers/dispenserDriver.h"
 #include "drivers/lcdDriver.h"
@@ -43,8 +37,8 @@
 #define LCD_COLUMNS 16
 #define LCD_LINES 2
 
-#define SS_PIN 5
-#define RST_PIN 0
+#define SS_PIN 17
+#define RST_PIN 4
 
 const char *ssid = "Redmi Note 9 Pro";
 const char *password = "12345768";
@@ -63,7 +57,7 @@ static DispenceSequence ds(&dd);
 
 static LedManager lm;
 
-Rfid rfid(SS_PIN, RST_PIN);
+Rfid rfid;
 static RfidDriver rm;
 
 // Use www.uuidgenerator.net to get new UUIDs
@@ -115,34 +109,26 @@ const size_t deviceIdSize = 16;
 
 void getTime();
 
-class MyServerCallbacks : public BLEServerCallbacks
-{
-    void onConnect(BLEServer *pServer)
-    {
+class MyServerCallbacks : public BLEServerCallbacks {
+    void onConnect(BLEServer *pServer) {
         connectedClient = true;
         Serial.println("A client has connected");
 
         pDeviceIDChar->setValue(uint8_tToHexString(deviceIdBytes, 16));
     }
 
-    void onDisconnect(BLEServer *pServer)
-    {
+    void onDisconnect(BLEServer *pServer) {
         connectedClient = false;
         Serial.println("The client has disconnected");
     }
 };
 
-class CharacteristicsCallbacks : public BLECharacteristicCallbacks
-{
-    void onWrite(BLECharacteristic *pCharacteristic)
-    {
-        if (pCharacteristic == pUpdateSignChar)
-        {
+class CharacteristicsCallbacks : public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic *pCharacteristic) {
+        if (pCharacteristic == pUpdateSignChar) {
             updateRequest = true;
-        }
-        else if (pCharacteristic == pRFIDReqChar)
-        {
-            RFID_request = true;
+        } else if (pCharacteristic == pRFIDReqChar) {
+            // RFID_request = true;
         }
     }
 };
@@ -150,8 +136,7 @@ class CharacteristicsCallbacks : public BLECharacteristicCallbacks
 void updateSchedule();
 void checkSchedule(String);
 
-void setup()
-{
+void setup() {
     Serial.begin(BAUD_RATE);
 
     Serial.println("\n\nSetup logs:\n");
@@ -175,8 +160,7 @@ void setup()
     WiFi.begin(ssid, password);
     Serial.print("Connecting to WiFi ");
 
-    while (WiFi.status() != WL_CONNECTED)
-    {
+    while (WiFi.status() != WL_CONNECTED) {
         Serial.print(".");
         delay(500);
     }
@@ -298,6 +282,7 @@ void setup()
 
     Serial.println("V. LED indication system initialized successfully\n");
 
+    rfid.init(SS_PIN, RST_PIN);
     rm.init(&rfid);
 
     Serial.println("VI. RFID manager initialized successfully\n");
@@ -311,35 +296,37 @@ void setup()
     updateSchedule();
 }
 
-void loop()
-{
-    if (ds.checkSeq())
-    {
+void loop() {
+    if (ds.checkSeq()) {
         ds.dispence();
-    }
-    else if (pRFIDReqChar->getValue().size() != 0 && ...)
-    {
-        // TODO (by Max):
-        // check if RFID tag read - checkSchedule(UUID);
-    }
-    else if (updateRequest)
-    {
+    } else if (pRFIDReqChar->getValue().size() != 0) {
+        // if tag is close to rfid reader
+        if (rm.isNewCardRead()) {
+            // read uid from tag
+            rm.readUid();
+            // check schedule
+            checkSchedule(rm.getCachedUid());
+        }
+    } else if (updateRequest) {
         updateSchedule();
         updateRequest = false;
-    }
-    else if (pRFIDReqChar->getValue().size() == 0)
-    {
-        // TODO (by Max):
-        // read RFID and pRFIDReqChar->setValue(RIFD[:10])
+    } else if (pRFIDReqChar->getValue().size() == 0) {
+        // if tag is close to rfid reader
+        if (rm.isNewCardRead()) {
+            // read uid from tag
+            rm.readUid();
+            // perform some operations...
+            // pRFIDReqChar->setValue(rm.getCachedUid());
+        }
     }
 
     ld.update();
+    if (rm.getCachedUid() != "") rm.clearCachedUid();
+    delay(100);
 }
 
-void updateSchedule()
-{
-    if ((WiFi.status() == WL_CONNECTED))
-    {
+void updateSchedule() {
+    if ((WiFi.status() == WL_CONNECTED)) {
         HTTPClient client;
 
         char url[100] = "https://";
@@ -351,14 +338,12 @@ void updateSchedule()
         client.begin(url);
         int httpCode = client.GET();
 
-        if (httpCode > 0)
-        {
+        if (httpCode > 0) {
             String payload = client.getString();
             userSchedules.clear();
             DeserializationError error = deserializeJson(userSchedules, payload);
 
-            if (error)
-            {
+            if (error) {
                 Serial.print(F("deserializeJson() failed: "));
                 Serial.println(error.c_str());
                 return;
@@ -367,41 +352,32 @@ void updateSchedule()
             // Add a bool field to make it possible to ignore already fulfilled schedule items
 
             JsonArray profiles = userSchedules["profiles"];
-            for (JsonObject profile : profiles)
-            {
+            for (JsonObject profile : profiles) {
                 JsonArray pillSchedules = profile["pillSchedules"];
-                for (JsonObject pillSchedule : pillSchedules)
-                {
+                for (JsonObject pillSchedule : pillSchedules) {
                     pillSchedule["dispensedToday"] = false;
                 }
             }
 
             Serial.println("Local schedule successfully updated!");
-        }
-        else
-        {
+        } else {
             Serial.println("Error on HTTP request");
         }
 
         client.end();
-    }
-    else
-    {
+    } else {
         Serial.println("No WiFi connection!");
     }
 }
 
-void checkSchedule(String userRFID)
-{
+void checkSchedule(String userRFID) {
     getTime();
 
     JsonArray profiles = userSchedules["profiles"];
-    for (JsonObject profile : profiles)
-    {
+    for (JsonObject profile : profiles) {
         const char *rfid = profile["rfid"];
 
-        if (rfid != nullptr && userRFID.equals(rfid))
-        {
+        if (rfid != nullptr && userRFID.equals(rfid)) {
             const char *username = profile["username"];
 
             Serial.print("Username associated with RFID ");
@@ -410,25 +386,21 @@ void checkSchedule(String userRFID)
             Serial.println(username);
 
             JsonArray pillSchedules = profile["pillSchedules"];
-            for (JsonObject pillSchedule : pillSchedules)
-            {
+            for (JsonObject pillSchedule : pillSchedules) {
                 int hour = pillSchedule["time"]["hour"];
                 int minute = pillSchedule["time"]["minutes"];
 
-                if (pillSchedule["dispensedToday"])
-                {
+                if (pillSchedule["dispensedToday"]) {
                     Serial.println(String(hour) + ':' + String(minute) + " schedule item for " + username + " was already fulfilled for today!");
                     continue;
                 }
 
                 int slotNumber = pillSchedule["slotNumber"];
 
-                if (abs((hour * 60 + minute) - (currTime[0] * 60 + currTime[1])) < 30)
-                {
+                if (abs((hour * 60 + minute) - (currTime[0] * 60 + currTime[1])) < 30) {
                     int quantity = pillSchedule["quantity"];
 
-                    if (quantity == 0)
-                    {
+                    if (quantity == 0) {
                         Serial.println("Insufficient supply in slot: " + String(slotNumber));
                         continue;
                     }
@@ -439,11 +411,9 @@ void checkSchedule(String userRFID)
                     ds.pushToSeq(slotNumber);
                     pillSchedule["dispensedToday"] = true;
 
-                    for (JsonObject updPillSchedule : pillSchedules)
-                    {
+                    for (JsonObject updPillSchedule : pillSchedules) {
                         int updItemSlotNumber = updPillSchedule["slotNumber"];
-                        if (updItemSlotNumber == slotNumber)
-                        {
+                        if (updItemSlotNumber == slotNumber) {
                             int currQuan = updPillSchedule["quantity"];
                             updPillSchedule["quantity"] = currQuan - 1;
                         }
@@ -460,21 +430,18 @@ void checkSchedule(String userRFID)
     }
 }
 
-std::string uint8_tToHexString(const uint8_t *data, size_t len)
-{
+std::string uint8_tToHexString(const uint8_t *data, size_t len) {
     std::stringstream ss;
     ss << std::hex;
 
-    for (size_t i = 0; i < len; ++i)
-    {
+    for (size_t i = 0; i < len; ++i) {
         ss << std::setw(2) << std::setfill('0') << static_cast<int>(data[i]);
     }
 
     return ss.str();
 }
 
-std::string uuid4Format(const std::string &uuid_str)
-{
+std::string uuid4Format(const std::string &uuid_str) {
     std::string formatted_uuid =
         uuid_str.substr(0, 8) + "-" +
         uuid_str.substr(8, 4) + "-" +
@@ -485,8 +452,7 @@ std::string uuid4Format(const std::string &uuid_str)
     return formatted_uuid;
 }
 
-void getTime()
-{
+void getTime() {
     timeClient.update();
     currTime[0] = timeClient.getHours();
     currTime[1] = timeClient.getMinutes();
