@@ -70,7 +70,12 @@ public static class DeviceRoutes
                             Quantity = ps.Quantity
                         }
                     )).ToArray()
-            }).ToArray()
+            }).ToArray(),
+            PillSlots = db.PillSchedules
+                .Where(ps => ps.PillSlot.OwnerId == owner.Id)
+                .AsEnumerable()
+                .Select(ps => ConfigPillSlot.FromPillSlot(ps.PillSlot))
+                .ToArray()
         };
 
         return TypedResults.Ok(config);
