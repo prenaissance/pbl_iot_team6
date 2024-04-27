@@ -73,6 +73,8 @@ public static class DeviceRoutes
             }).ToArray(),
             PillSlots = db.PillSchedules
                 .Where(ps => ps.PillSlot.OwnerId == owner.Id)
+                .DistinctBy(ps => ps.PillSlot.SlotNumber)
+                .OrderBy(ps => ps.PillSlot.SlotNumber)
                 .AsEnumerable()
                 .Select(ps => ConfigPillSlot.FromPillSlot(ps.PillSlot))
                 .ToArray()
