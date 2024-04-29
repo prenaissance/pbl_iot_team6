@@ -13,11 +13,11 @@ public:
     {
         if (active)
         {
-            tone(anodePin, CSH_FREQ);
+            analogWrite(anodePin, 255);
         }
         else
         {
-            tone(anodePin, 0);
+            analogWrite(anodePin, 0);
         }
     }
 
@@ -25,7 +25,7 @@ public:
     void stopBuzz() { active = false; }
 };
 
-class IRSensDriver
+class IR_SensDriver
 {
 private:
     int signalPin;
@@ -34,8 +34,10 @@ private:
     bool detected;
     bool picked;
 
+    unsigned long armTime;
+
 public:
-    IRSensDriver(int pin) : signalPin(pin)
+    IR_SensDriver(int pin) : signalPin(pin)
     {
         reset();
     }
@@ -43,6 +45,7 @@ public:
     void reset()
     {
         armed = false;
+        armTime = 0;
         detected = false;
         picked = false;
     }
@@ -53,6 +56,9 @@ public:
         {
             reset();
             armed = true;
+            armTime = millis();
+
+            Serial.println("Sensor armed!");
         }
     }
 
@@ -77,10 +83,43 @@ public:
         }
     }
 
-    bool check()
+    bool getArmed()
     {
-        bool result = detected && picked;
-        reset();
-        return result;
+        return armed;
+    }
+
+    unsigned long getArmTime()
+    {
+        return armTime;
+    }
+
+    int check()
+    {
+        if (millis() - armTime > 30000)
+        {
+            reset();
+            return 0;
+        }
+        else if (millis() - armTime > 15000)
+        {
+            if (!detected)
+            {
+                return 1;
+                reset();
+            }
+            else if (detected && !picked)
+            {
+                return 2;
+            }
+            else
+            {
+                reset();
+                return 0;
+            }
+        }
+        else
+        {
+            return -1;
+        }
     }
 };

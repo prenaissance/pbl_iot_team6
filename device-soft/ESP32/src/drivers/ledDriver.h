@@ -7,12 +7,12 @@ private:
 
     void lightRed()
     {
-        analogWrite(R, 255);
+        analogWrite(R, 32);
     }
 
     void lightGreen()
     {
-        analogWrite(G, 255);
+        analogWrite(G, 32);
     }
 
     void lightYellow()
@@ -39,11 +39,11 @@ public:
     {
         resetColors();
 
-        if (stock < 2)
+        if (stock == 0)
         {
             lightRed();
         }
-        else if (stock < 5)
+        else if (stock < 3)
         {
             lightYellow();
         }

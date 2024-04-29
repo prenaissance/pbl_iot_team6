@@ -7,6 +7,7 @@
 #include <ESP32Servo.h>
 #include <HTTPClient.h>
 #include <LiquidCrystal_I2C.h>
+#include <Wire.h>
 #include <MFRC522.h>
 #include <NTPClient.h>
 #include <SPI.h>
@@ -25,15 +26,16 @@
 
 #define BAUD_RATE 9600
 
-#define MAX_SCHEDULE_SIZE_BYTES 4096
+#define SERVO_PIN 15
 
-#define SERVO_PIN 18
+#define LED1_R 26
+#define LED1_G 27
 
-#define LED1_R 16
-#define LED1_G 17
+#define LED2_R 14
+#define LED2_G 12
 
-#define LED2_R 26
-#define LED2_G 27
+#define IR_PIN 13
+#define PIEZO_PIN 32
 
 #define I2C_ADDR 0x27
 #define LCD_COLUMNS 16
@@ -49,13 +51,16 @@
 
 #define SCHED_SERV_HOST "dispenser-backend.onrender.com"
 
-char outputBuffer[255];
+char outputBuffer[256];
 
 uint8_t deviceIdBytes[16];
 std::string deviceIdBase64 = "";
 
 LiquidCrystal_I2C lcd(I2C_ADDR, LCD_COLUMNS, LCD_LINES);
 static LcdDriver ld(&lcd);
+
+PiezoBuzzerDriver pd(PIEZO_PIN);
+IR_SensDriver id(IR_PIN);
 
 Servo motor;
 static DispenserDriver dd(&motor);
@@ -79,7 +84,7 @@ static RfidDriver rm;
 #define DEVICE_ID_CHAR_UUID "5a9bec66-0f89-4383-b779-c3b9162d2814"
 #define DEVICE_ID_CHAR_DESC "ID to send to client when connecting"
 
-StaticJsonDocument<MAX_SCHEDULE_SIZE_BYTES> deviceData;
+StaticJsonDocument<4096> deviceData;
 
 BLEServer *pServer = NULL;
 BLEService *pService = NULL;
@@ -113,7 +118,9 @@ class MyServerCallbacks : public BLEServerCallbacks
     void onConnect(BLEServer *pServer)
     {
         connectedClient = true;
+
         Serial.println("A client has connected");
+        ld.accessQueue()->enqueue(LcdMsg("  An BLE client ", "  has connected ", 1, 3000));
 
         pDeviceIDChar->setValue(uint8_tToHexString(deviceIdBytes, 16));
     }
@@ -121,7 +128,11 @@ class MyServerCallbacks : public BLEServerCallbacks
     void onDisconnect(BLEServer *pServer)
     {
         connectedClient = false;
+
         Serial.println("The client has disconnected");
+        ld.accessQueue()->enqueue(LcdMsg(" The BLE client ", "  has disco-ed  ", 1, 3000));
+
+        pServer->startAdvertising();
     }
 };
 
@@ -132,10 +143,12 @@ class CharacteristicsCallbacks : public BLECharacteristicCallbacks
         if (pCharacteristic == pUpdateSignChar)
         {
             updateRequest = true;
+            ld.accessQueue()->enqueue(LcdMsg("    Read your     ", " update request ", 1, 6000));
         }
         else if (pCharacteristic == pRFIDReqChar)
         {
-            // RFID_request = true;
+            pRFIDReqChar->setValue("");
+            ld.accessQueue()->enqueue(LcdMsg("     Approach     ", "     your tag     ", 1, 6000));
         }
     }
 };
@@ -147,13 +160,35 @@ HTTPClient client;
 
 void setup()
 {
+    Wire.begin();
     Serial.begin(BAUD_RATE);
 
     Serial.println("\n\nSetup logs:\n");
 
+    pinMode(SERVO_PIN, OUTPUT);
+
+    pinMode(LED1_R, OUTPUT);
+    pinMode(LED1_G, OUTPUT);
+
+    pinMode(LED2_R, OUTPUT);
+    pinMode(LED2_G, OUTPUT);
+
+    pinMode(IR_PIN, INPUT);
+    pinMode(PIEZO_PIN, OUTPUT);
+
+    Serial.println("I. GPIO setup - success\n");
+
+    lcd.init();
+    lcd.backlight();
+
+    ld.accessQueue()->enqueue(LcdMsg("    Setup...    ", "", 1, 1));
+    ld.update();
+
+    Serial.println("II. LCD setup - success\n");
+
     // Device's UUID
 
-    Serial.println("I. Device uuid setup");
+    Serial.println("III. Device uuid setup\n");
 
     esp_fill_random(deviceIdBytes, sizeof(deviceIdBytes));
     deviceIdBase64 = uuid4Format(uint8_tToHexString(deviceIdBytes, 16));
@@ -164,7 +199,7 @@ void setup()
 
     // WiFi
 
-    Serial.print("II. ");
+    Serial.print("IV. ");
 
     WiFi.begin(WIFI_SSID, WIFI_PASS);
     Serial.print("Connecting to WiFi ");
@@ -175,12 +210,14 @@ void setup()
         delay(500);
     }
 
-    sprintf(outputBuffer, "\n--- Successfully connected to %s network\n", WIFI_SSID);
-    Serial.println(outputBuffer);
+    sprintf(outputBuffer, "\n--- Successfully connected to '%s' with IP: ", WIFI_SSID);
+    Serial.print(outputBuffer);
+    Serial.println(WiFi.localIP());
+    Serial.print("\n");
 
     // BLE
 
-    Serial.println("III. BLE initialization...");
+    Serial.println("V. BLE initialization...");
 
     BLEDevice::init(BLE_DEVICE_NAME);
 
@@ -284,79 +321,114 @@ void setup()
 
     motor.attach(SERVO_PIN);
 
-    Serial.println("IV. Motor pinout set up successfully\n");
+    Serial.println("VI. Motor pinout set up successfully\n");
 
     lm.init(LedDriver(LED1_R, LED1_G), 0);
+    lm.update(0, 0);
     lm.init(LedDriver(LED2_R, LED2_G), 1);
+    lm.update(0, 1);
 
-    Serial.println("V. LED indication system initialized successfully\n");
+    Serial.println("VII. LED indication system initialized successfully\n");
 
     rfid.init(SS_PIN, RST_PIN);
     rm.init(&rfid);
 
-    Serial.println("VI. RFID manager initialized successfully\n");
+    Serial.println("VIII. RFID manager initialized successfully\n");
 
-    Serial.println("!Initialization finished!");
+    Serial.println("!Setup finished!");
+
+    ld.accessQueue()->enqueue(LcdMsg("     Setup      ", "    finished    ", 1, 1));
+    ld.update();
 
     updateRequest = true;
 }
 
 void loop()
 {
-    if (updateRequest)
+    if (ds.checkSeq())
+    {
+        ds.displaySequence();
+        ds.dispence();
+    }
+    else if (updateRequest)
     {
         updateSchedule();
         updateRequest = false;
     }
+    else if (pRFIDReqChar->getValue().size() == 0)
+    {
+        if (rm.isNewCardRead())
+        {
+            rm.readUid();
 
-    checkSchedule("AQIDBA==");
+            sprintf(outputBuffer, "Requested UUID: %s\n", rm.getCachedUid());
+            Serial.println(outputBuffer);
+            pRFIDReqChar->setValue(rm.getCachedUid().c_str());
+            pRFIDReqChar->notify();
 
-    // if (ds.checkSeq())
-    // {
-    //     ds.dispence();
-    // }
-    // else if (pRFIDReqChar->getValue().size() != 0)
-    // {
-    //     // if tag is close to rfid reader
-    //     if (rm.isNewCardRead())
-    //     {
-    //         // read uid from tag
-    //         rm.readUid();
-    //         // check schedule
-    //         checkSchedule(rm.getCachedUid());
-    //     }
-    // }
-    // else if (updateRequest)
-    // {
-    //     updateSchedule();
-    //     updateRequest = false;
-    // }
-    // else if (pRFIDReqChar->getValue().size() == 0)
-    // {
-    //     // if tag is close to rfid reader
-    //     if (rm.isNewCardRead())
-    //     {
-    //         // read uid from tag
-    //         rm.readUid();
-    //         // perform some operations...
-    //         // pRFIDReqChar->setValue(rm.getCachedUid());
-    //     }
-    // }
+            ld.accessQueue()->enqueue(LcdMsg("    Tag UUID    ", " read suc-fully ", 1, 6000));
+        }
+    }
+    else if (pRFIDReqChar->getValue().size() != 0)
+    {
+        if (rm.isNewCardRead())
+        {
+            rm.readUid();
 
-    // ld.update();
-    // if (rm.getCachedUid() != "")
-    // {
-    //     rm.clearCachedUid();
-    // }
+            sprintf(outputBuffer, "Approached UUID: %s\n", rm.getCachedUid());
+            Serial.println(outputBuffer);
 
-    delay(5000);
+            checkSchedule(rm.getCachedUid());
+        }
+    }
+
+    if (id.getArmed())
+    {
+        id.detect();
+
+        switch (id.check())
+        {
+        case 0:
+            pd.stopBuzz();
+
+            Serial.println("Med-s picked up");
+            ld.accessQueue()->enqueue(LcdMsg(" Healthier with ", "   IntelliDose  ", 1, 4000));
+
+            break;
+
+        case 1:
+            Serial.println("Mechanism failure!");
+            ld.accessQueue()->enqueue(LcdMsg("   Mechanism    ", "    failure!    ", 5, 1));
+
+            break;
+
+        case 2:
+            pd.initBuzz();
+
+            Serial.println("Pickup failure!");
+            ld.accessQueue()->enqueue(LcdMsg("   Pickup your  ", "   medicine!    ", 5, 1));
+
+        default:
+            sprintf(outputBuffer, "%d seconds passed since disp. procedure start", (int)((millis() - id.getArmTime()) / 1000));
+            Serial.println(outputBuffer);
+
+            break;
+        }
+    }
+
+    if (rm.getCachedUid() != "")
+    {
+        rm.clearCachedUid();
+    }
+    ld.update();
+    pd.buzz();
 }
 
 void updateSchedule()
 {
     if ((WiFi.status() == WL_CONNECTED))
     {
-        Serial.println(ESP.getFreeHeap());
+        // Serial.println(ESP.getFreeHeap());
 
         char url[100];
         strcpy(url, "https://");
@@ -395,20 +467,33 @@ void updateSchedule()
                 }
             }
 
-            // JsonArray pillSlots = deviceData["pillSlots"];
-            // for (JsonObject pillSlot : pillSlots)
-            // {
-            //     int currPillCount = pillSlot["pillCount"];
-            //     pillSlot["pillCount"] = currPillCount + 1;
-            // }
+            JsonArray pillSlots = deviceData["pillSlots"];
+            for (JsonObject pillSlot : pillSlots)
+            {
+                int currPillCount = pillSlot["pillCount"];
+                pillSlot["pillCount"] = currPillCount + 1;
+            }
 
-            Serial.println("Local schedules successfully updated!");
+            for (JsonObject pillSlot : pillSlots)
+            {
+                int slotPillCount = pillSlot["pillCount"];
+                int slotIdx = pillSlot["slotNumber"];
+                slotIdx--;
+                lm.update(slotPillCount, slotIdx);
+            }
+
+            ld.accessQueue()->enqueue(LcdMsg(" The schedules  ", "  were updated  ", 1, 3000));
+
+            Serial.println("Local schedules successfully updated:\n");
 
             serializeJsonPretty(deviceData, Serial);
+
+            Serial.print("\n");
         }
         else
         {
             Serial.println("Error on HTTP request");
+            ld.accessQueue()->enqueue(LcdMsg(" Failed to upd. ", " the schedules  ", 1, 3000));
         }
 
         client.end();
@@ -421,10 +506,15 @@ void updateSchedule()
 
 void checkSchedule(String userRFID)
 {
+    char l1Buff[LCD_COLUMNS];
+    char l2Buff[LCD_COLUMNS];
+
     getTime();
 
     JsonArray profiles = deviceData["profiles"];
     JsonArray pillSlots = deviceData["pillSlots"];
+
+    bool found = false;
 
     for (JsonObject profile : profiles)
     {
@@ -436,6 +526,9 @@ void checkSchedule(String userRFID)
 
             sprintf(outputBuffer, "Username associated with RFID %s is: %s", userRFID.c_str(), username);
             Serial.println(outputBuffer);
+
+            sprintf(l2Buff, "     %d:%d      ", currTime[0], currTime[1]);
+            ld.accessQueue()->enqueue(LcdMsg(username, l2Buff, 1, 3000));
 
             JsonArray pillSchedules = profile["pillSchedules"];
 
@@ -450,11 +543,15 @@ void checkSchedule(String userRFID)
                     sprintf(outputBuffer, "%d:%d schedule item for %s  was already fulfilled today!", hour, minute, username);
                     Serial.println(outputBuffer);
 
+                    ld.accessQueue()->enqueue(LcdMsg("    Already     ", "   fulfilled!   ", 1, 3000));
+
                     continue;
                 }
 
-                if (abs((hour * 60 + minute) - (currTime[0] * 60 + currTime[1])) < 120)
+                if (abs((hour * 60 + minute) - (currTime[0] * 60 + currTime[1])) < 240)
                 {
+                    found = true;
+
                     JsonObject relevantSlot;
 
                     for (JsonObject pillSlot : pillSlots)
@@ -484,6 +581,7 @@ void checkSchedule(String userRFID)
                         else
                         {
                             ds.pushToSeq(slotNumber);
+                            id.arm();
                             int currPillCount = relevantSlot["pillCount"];
                             relevantSlot["pillCount"] = currPillCount - 1;
                             pillSchedule["dispensedToday"] = true;
@@ -497,11 +595,13 @@ void checkSchedule(String userRFID)
                 }
             }
         }
-
-        return;
     }
 
-    serializeJsonPretty(deviceData, Serial);
+    if (!found)
+    {
+        Serial.println("No schedule items found!");
+        ld.accessQueue()->enqueue(LcdMsg("No sched. items ", "     found!     ", 1, 5000));
+    }
 }
 
 std::string uint8_tToHexString(const uint8_t *data, size_t len)
