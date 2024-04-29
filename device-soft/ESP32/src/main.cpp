@@ -23,6 +23,7 @@
 #include "drivers/ledDriver.h"
 #include "drivers/pickupSys.h"
 #include "drivers/rfidDriver.h"
+#include "./deviceData.h"
 
 #define BAUD_RATE 9600
 
@@ -84,7 +85,7 @@ static RfidDriver rm;
 #define DEVICE_ID_CHAR_UUID "5a9bec66-0f89-4383-b779-c3b9162d2814"
 #define DEVICE_ID_CHAR_DESC "ID to send to client when connecting"
 
-StaticJsonDocument<4096> deviceData;
+DeviceData deviceData;
 
 BLEServer *pServer = NULL;
 BLEService *pService = NULL;
@@ -157,6 +158,81 @@ void updateSchedule();
 void checkSchedule(String);
 
 HTTPClient client;
+const char* root_ca = 
+"-----BEGIN CERTIFICATE-----\n" \
+"MIIFMTCCBNegAwIBAgIQBrtkycb6mX3s8qqF49H4QDAKBggqhkjOPQQDAjBKMQsw\n" \
+"CQYDVQQGEwJVUzEZMBcGA1UEChMQQ2xvdWRmbGFyZSwgSW5jLjEgMB4GA1UEAxMX\n" \
+"Q2xvdWRmbGFyZSBJbmMgRUNDIENBLTMwHhcNMjMwOTE3MDAwMDAwWhcNMjQwOTE2\n" \
+"MjM1OTU5WjBsMQswCQYDVQQGEwJVUzETMBEGA1UECBMKQ2FsaWZvcm5pYTEWMBQG\n" \
+"A1UEBxMNU2FuIEZyYW5jaXNjbzEZMBcGA1UEChMQQ2xvdWRmbGFyZSwgSW5jLjEV\n" \
+"MBMGA1UEAxMMb25yZW5kZXIuY29tMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE\n" \
+"9/skyunh3xYMDOtYBoFbFqqG0sfKA4eQ7DA+9pfkoJ3UiPrnHu55oV5aVx8C0BCs\n" \
+"AlOQ9zO9bTJdB1AExfGZCqOCA3swggN3MB8GA1UdIwQYMBaAFKXON+rrsHUOlGeI\n" \
+"tEX62SQQh5YfMB0GA1UdDgQWBBS7uwxZiPZNVBvLunrHmeySwGCpmTA/BgNVHREE\n" \
+"ODA2ggxvbnJlbmRlci5jb22CDioub25yZW5kZXIuY29tghYqLnN0YWdpbmcub25y\n" \
+"ZW5kZXIuY29tMD4GA1UdIAQ3MDUwMwYGZ4EMAQICMCkwJwYIKwYBBQUHAgEWG2h0\n" \
+"dHA6Ly93d3cuZGlnaWNlcnQuY29tL0NQUzAOBgNVHQ8BAf8EBAMCA4gwHQYDVR0l\n" \
+"BBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMCMHsGA1UdHwR0MHIwN6A1oDOGMWh0dHA6\n" \
+"Ly9jcmwzLmRpZ2ljZXJ0LmNvbS9DbG91ZGZsYXJlSW5jRUNDQ0EtMy5jcmwwN6A1\n" \
+"oDOGMWh0dHA6Ly9jcmw0LmRpZ2ljZXJ0LmNvbS9DbG91ZGZsYXJlSW5jRUNDQ0Et\n" \
+"My5jcmwwdgYIKwYBBQUHAQEEajBoMCQGCCsGAQUFBzABhhhodHRwOi8vb2NzcC5k\n" \
+"aWdpY2VydC5jb20wQAYIKwYBBQUHMAKGNGh0dHA6Ly9jYWNlcnRzLmRpZ2ljZXJ0\n" \
+"LmNvbS9DbG91ZGZsYXJlSW5jRUNDQ0EtMy5jcnQwDAYDVR0TAQH/BAIwADCCAYAG\n" \
+"CisGAQQB1nkCBAIEggFwBIIBbAFqAHcAdv+IPwq2+5VRwmHM9Ye6NLSkzbsp3GhC\n" \
+"Cp/mZ0xaOnQAAAGKoV3MnwAABAMASDBGAiEAwX79/CLq/+cEzrRYFcfvZj+0mvHc\n" \
+"0YvoxNxMK41A+PgCIQCzBiXH8A0i/GQo3E1Mv+OY4WVPGq2IN9zyvJMAkSvQ3wB3\n" \
+"AEiw42vapkc0D+VqAvqdMOscUgHLVt0sgdm7v6s52IRzAAABiqFdzGsAAAQDAEgw\n" \
+"RgIhAK5jGDX15N55UiAmFQRigYV7DpnWgclRiaFo3kqE4RlnAiEA0kazumH7JTjx\n" \
+"ybtDrN85mUdPEfVQ0/S17/Y4ZXWj2NsAdgDatr9rP7W2Ip+bwrtca+hwkXFsu1GE\n" \
+"hTS9pD0wSNf7qwAAAYqhXcxKAAAEAwBHMEUCIQCPksoAppI8Pjx0dp5Us8GFQ1dA\n" \
+"e0FjuVuSicQiiHk1twIgKQT67o1VPpC7HguRwHVVq6NtuxdbsrWLsJDH1GCwxe0w\n" \
+"CgYIKoZIzj0EAwIDSAAwRQIhAOYALpRvbhdbBbniY6lHSUDCSxftiBJkjc/P4vpH\n" \
+"PLm4AiAGi8Cgh+ECRh+2Oj99c5SlYBm+ZcOyAgYgtF+jsjy7hA==\n" \
+"-----END CERTIFICATE-----\n" \
+"-----BEGIN CERTIFICATE-----\n" \
+"MIIDzTCCArWgAwIBAgIQCjeHZF5ftIwiTv0b7RQMPDANBgkqhkiG9w0BAQsFADBa\n" \
+"MQswCQYDVQQGEwJJRTESMBAGA1UEChMJQmFsdGltb3JlMRMwEQYDVQQLEwpDeWJl\n" \
+"clRydXN0MSIwIAYDVQQDExlCYWx0aW1vcmUgQ3liZXJUcnVzdCBSb290MB4XDTIw\n" \
+"MDEyNzEyNDgwOFoXDTI0MTIzMTIzNTk1OVowSjELMAkGA1UEBhMCVVMxGTAXBgNV\n" \
+"BAoTEENsb3VkZmxhcmUsIEluYy4xIDAeBgNVBAMTF0Nsb3VkZmxhcmUgSW5jIEVD\n" \
+"QyBDQS0zMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEua1NZpkUC0bsH4HRKlAe\n" \
+"nQMVLzQSfS2WuIg4m4Vfj7+7Te9hRsTJc9QkT+DuHM5ss1FxL2ruTAUJd9NyYqSb\n" \
+"16OCAWgwggFkMB0GA1UdDgQWBBSlzjfq67B1DpRniLRF+tkkEIeWHzAfBgNVHSME\n" \
+"GDAWgBTlnVkwgkdYzKz6CFQ2hns6tQRN8DAOBgNVHQ8BAf8EBAMCAYYwHQYDVR0l\n" \
+"BBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMCMBIGA1UdEwEB/wQIMAYBAf8CAQAwNAYI\n" \
+"KwYBBQUHAQEEKDAmMCQGCCsGAQUFBzABhhhodHRwOi8vb2NzcC5kaWdpY2VydC5j\n" \
+"b20wOgYDVR0fBDMwMTAvoC2gK4YpaHR0cDovL2NybDMuZGlnaWNlcnQuY29tL09t\n" \
+"bmlyb290MjAyNS5jcmwwbQYDVR0gBGYwZDA3BglghkgBhv1sAQEwKjAoBggrBgEF\n" \
+"BQcCARYcaHR0cHM6Ly93d3cuZGlnaWNlcnQuY29tL0NQUzALBglghkgBhv1sAQIw\n" \
+"CAYGZ4EMAQIBMAgGBmeBDAECAjAIBgZngQwBAgMwDQYJKoZIhvcNAQELBQADggEB\n" \
+"AAUkHd0bsCrrmNaF4zlNXmtXnYJX/OvoMaJXkGUFvhZEOFp3ArnPEELG4ZKk40Un\n" \
+"+ABHLGioVplTVI+tnkDB0A+21w0LOEhsUCxJkAZbZB2LzEgwLt4I4ptJIsCSDBFe\n" \
+"lpKU1fwg3FZs5ZKTv3ocwDfjhUkV+ivhdDkYD7fa86JXWGBPzI6UAPxGezQxPk1H\n" \
+"goE6y/SJXQ7vTQ1unBuCJN0yJV0ReFEQPaA1IwQvZW+cwdFD19Ae8zFnWSfda9J1\n" \
+"CZMRJCQUzym+5iPDuI9yP+kHyCREU3qzuWFloUwOxkgAyXVjBYdwRVKD05WdRerw\n" \
+"6DEdfgkfCv4+3ao8XnTSrLE=\n" \
+"-----END CERTIFICATE-----\n" \
+"-----BEGIN CERTIFICATE-----\n" \
+"MIIDdzCCAl+gAwIBAgIEAgAAuTANBgkqhkiG9w0BAQUFADBaMQswCQYDVQQGEwJJ\n" \
+"RTESMBAGA1UEChMJQmFsdGltb3JlMRMwEQYDVQQLEwpDeWJlclRydXN0MSIwIAYD\n" \
+"VQQDExlCYWx0aW1vcmUgQ3liZXJUcnVzdCBSb290MB4XDTAwMDUxMjE4NDYwMFoX\n" \
+"DTI1MDUxMjIzNTkwMFowWjELMAkGA1UEBhMCSUUxEjAQBgNVBAoTCUJhbHRpbW9y\n" \
+"ZTETMBEGA1UECxMKQ3liZXJUcnVzdDEiMCAGA1UEAxMZQmFsdGltb3JlIEN5YmVy\n" \
+"VHJ1c3QgUm9vdDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKMEuyKr\n" \
+"mD1X6CZymrV51Cni4eiVgLGw41uOKymaZN+hXe2wCQVt2yguzmKiYv60iNoS6zjr\n" \
+"IZ3AQSsBUnuId9Mcj8e6uYi1agnnc+gRQKfRzMpijS3ljwumUNKoUMMo6vWrJYeK\n" \
+"mpYcqWe4PwzV9/lSEy/CG9VwcPCPwBLKBsua4dnKM3p31vjsufFoREJIE9LAwqSu\n" \
+"XmD+tqYF/LTdB1kC1FkYmGP1pWPgkAx9XbIGevOF6uvUA65ehD5f/xXtabz5OTZy\n" \
+"dc93Uk3zyZAsuT3lySNTPx8kmCFcB5kpvcY67Oduhjprl3RjM71oGDHweI12v/ye\n" \
+"jl0qhqdNkNwnGjkCAwEAAaNFMEMwHQYDVR0OBBYEFOWdWTCCR1jMrPoIVDaGezq1\n" \
+"BE3wMBIGA1UdEwEB/wQIMAYBAf8CAQMwDgYDVR0PAQH/BAQDAgEGMA0GCSqGSIb3\n" \
+"DQEBBQUAA4IBAQCFDF2O5G9RaEIFoN27TyclhAO992T9Ldcw46QQF+vaKSm2eT92\n" \
+"9hkTI7gQCvlYpNRhcL0EYWoSihfVCr3FvDB81ukMJY2GQE/szKN+OMY3EU/t3Wgx\n" \
+"jkzSswF07r51XgdIGn9w/xZchMB5hbgF/X++ZRGjD8ACtPhSNzkE1akxehi/oCr0\n" \
+"Epn3o0WC4zxe9Z2etciefC7IpJ5OCBRLbf1wbWsaY71k5h+3zvDyny67G7fyUIhz\n" \
+"ksLi4xaNmjICq44Y3ekQEe5+NauQrz4wlHrQMz2nZQ/1/I6eYs9HRCwBXbsdtTLS\n" \
+"R9I4LtD+gdwyah617jzV/OeBHRnDJELqYzmp\n" \
+"-----END CERTIFICATE-----\n";
 
 void setup()
 {
@@ -340,113 +416,113 @@ void setup()
     ld.accessQueue()->enqueue(LcdMsg("     Setup      ", "    finished    ", 1, 1));
     ld.update();
 
-    updateRequest = true;
+    updateSchedule();
+    updateRequest = false;
 }
 
 void loop()
 {
-    if (ds.checkSeq())
-    {
-        ds.displaySequence();
-        ds.dispence();
-    }
-    else if (updateRequest)
-    {
-        updateSchedule();
-        updateRequest = false;
-    }
-    else if (pRFIDReqChar->getValue().size() == 0)
-    {
-        if (rm.isNewCardRead())
-        {
-            rm.readUid();
+    // if (ds.checkSeq())
+    // {
+    //     ds.displaySequence();
+    //     ds.dispence();
+    // }
+    // else if (updateRequest)
+    // {
+    //     updateSchedule();
+    //     updateRequest = false;
+    // }
+    // else if (pRFIDReqChar->getValue().size() == 0)
+    // {
+    //     if (rm.isNewCardRead())
+    //     {
+    //         rm.readUid();
 
-            sprintf(outputBuffer, "Requested UUID: %s\n", rm.getCachedUid());
-            Serial.println(outputBuffer);
-            pRFIDReqChar->setValue(rm.getCachedUid().c_str());
-            pRFIDReqChar->notify();
+    //         sprintf(outputBuffer, "Requested UUID: %s\n", rm.getCachedUid());
+    //         Serial.println(outputBuffer);
+    //         pRFIDReqChar->setValue(rm.getCachedUid().c_str());
+    //         pRFIDReqChar->notify();
 
-            ld.accessQueue()->enqueue(LcdMsg("    Tag UUID    ", " read suc-fully ", 1, 6000));
-        }
-    }
-    else if (pRFIDReqChar->getValue().size() != 0)
-    {
-        if (rm.isNewCardRead())
-        {
-            rm.readUid();
+    //         ld.accessQueue()->enqueue(LcdMsg("    Tag UUID    ", " read suc-fully ", 1, 6000));
+    //     }
+    // }
+    // else if (pRFIDReqChar->getValue().size() != 0)
+    // {
+    //     if (rm.isNewCardRead())
+    //     {
+    //         rm.readUid();
 
-            sprintf(outputBuffer, "Approached UUID: %s\n", rm.getCachedUid());
-            Serial.println(outputBuffer);
+    //         sprintf(outputBuffer, "Approached UUID: %s\n", rm.getCachedUid());
+    //         Serial.println(outputBuffer);
 
-            checkSchedule(rm.getCachedUid());
-        }
-    }
+    //         checkSchedule(rm.getCachedUid());
+    //     }
+    // }
 
-    if (id.getArmed())
-    {
-        id.detect();
+    // if (id.getArmed())
+    // {
+    //     id.detect();
 
-        switch (id.check())
-        {
-        case 0:
-            pd.stopBuzz();
+    //     switch (id.check())
+    //     {
+    //     case 0:
+    //         pd.stopBuzz();
 
-            Serial.println("Med-s picked up");
-            ld.accessQueue()->enqueue(LcdMsg(" Healthier with ", "   IntelliDose  ", 1, 4000));
+    //         Serial.println("Med-s picked up");
+    //         ld.accessQueue()->enqueue(LcdMsg(" Healthier with ", "   IntelliDose  ", 1, 4000));
 
-            break;
+    //         break;
 
-        case 1:
-            Serial.println("Mechanism failure!");
-            ld.accessQueue()->enqueue(LcdMsg("   Mechanism    ", "    failure!    ", 5, 1));
+    //     case 1:
+    //         Serial.println("Mechanism failure!");
+    //         ld.accessQueue()->enqueue(LcdMsg("   Mechanism    ", "    failure!    ", 5, 1));
 
-            break;
+    //         break;
 
-        case 2:
-            pd.initBuzz();
+    //     case 2:
+    //         pd.initBuzz();
 
-            Serial.println("Pickup failure!");
-            ld.accessQueue()->enqueue(LcdMsg("   Pickup your  ", "   medicine!    ", 5, 1));
+    //         Serial.println("Pickup failure!");
+    //         ld.accessQueue()->enqueue(LcdMsg("   Pickup your  ", "   medicine!    ", 5, 1));
 
-        default:
-            sprintf(outputBuffer, "%d seconds passed since disp. procedure start", (int)((millis() - id.getArmTime()) / 1000));
-            Serial.println(outputBuffer);
+    //     default:
+    //         sprintf(outputBuffer, "%d seconds passed since disp. procedure start", (int)((millis() - id.getArmTime()) / 1000));
+    //         Serial.println(outputBuffer);
 
-            break;
-        }
-    }
+    //         break;
+    //     }
+    // }
 
-    if (rm.getCachedUid() != "")
-    {
-        rm.clearCachedUid();
-    }
-    ld.update();
-    pd.buzz();
+    // if (rm.getCachedUid() != "")
+    // {
+    //     rm.clearCachedUid();
+    // }
+    // ld.update();
+    // pd.buzz();
 }
 
 void updateSchedule()
 {
     if ((WiFi.status() == WL_CONNECTED))
     {
-        // Serial.println(ESP.getFreeHeap());
+        char reqUrl[200];
+        strcpy(reqUrl, "https://");
+        strcat(reqUrl, SCHED_SERV_HOST);
+        strcat(reqUrl, "/api/devices/");
+        strcat(reqUrl, deviceIdBase64.c_str());
+        strcat(reqUrl, "/config");
 
-        char url[100];
-        strcpy(url, "https://");
-        strcat(url, SCHED_SERV_HOST);
-        strcat(url, "/api/devices/");
-        strcat(url, deviceIdBase64.c_str());
-        strcat(url, "/config");
-
-        client.begin(url);
+        client.begin(reqUrl, root_ca);
+        Serial.println(ESP.getFreeHeap());
         int httpCode = client.GET();
 
-        sprintf(outputBuffer, "GET %s : %d", url, httpCode);
+        sprintf(outputBuffer, "GET %s : %d", reqUrl, httpCode);
         Serial.println(outputBuffer);
 
         if (httpCode > 0)
         {
-            deviceData.clear();
-            DeserializationError error = deserializeJson(deviceData, client.getString());
+            StaticJsonDocument<4096> respBody;
+            DeserializationError error = deserializeJson(respBody, client.getString());
 
             if (error)
             {
@@ -455,40 +531,46 @@ void updateSchedule()
                 return;
             }
 
-            // Add a bool field to make it possible to ignore already fulfilled schedule items
+            // Record compartments
 
-            JsonArray profiles = deviceData["profiles"];
+            JsonArray pillSlots = respBody["pillSlots"];
+            for (JsonObject pillSlot : pillSlots)
+            {
+                int slotNumber = pillSlot["slotNumber"];
+                const char *pillName = pillSlot["pillName"];
+                int pillCount = pillSlots["pillCount"];
+
+                deviceData.addPillSlot(PillSlot(pillName, pillCount + 1), slotNumber);
+                lm.update(pillCount, slotNumber - 1);
+            }
+
+            // Record profiles and their schedules
+
+            JsonArray profiles = respBody["profiles"];
             for (JsonObject profile : profiles)
             {
-                JsonArray pillSchedules = profile["pillSchedules"];
+                const char *username = profile["username"];
+                const char *RFID_UID = profile["rfid"];
+
+                deviceData.addProfile(Profile(username, RFID_UID));
+
+                Profile *pProf = deviceData.getProfile(String(RFID_UID));
+
+                JsonArray pillSchedules = respBody["pillSchedules"];
                 for (JsonObject pillSchedule : pillSchedules)
                 {
-                    pillSchedule["dispensedToday"] = false;
+                    int hour = pillSchedule["time"]["hour"];
+                    int minute = pillSchedule["time"]["minutes"];
+                    int slotNumber = pillSchedule["slotNumber"];
+                    int quantity = pillSchedule["quantity"];
+
+                    pProf->addItem(ScheduleItem(hour, minute, slotNumber, quantity));
                 }
-            }
-
-            JsonArray pillSlots = deviceData["pillSlots"];
-            for (JsonObject pillSlot : pillSlots)
-            {
-                int currPillCount = pillSlot["pillCount"];
-                pillSlot["pillCount"] = currPillCount + 1;
-            }
-
-            for (JsonObject pillSlot : pillSlots)
-            {
-                int slotPillCount = pillSlot["pillCount"];
-                int slotIdx = pillSlot["slotNumber"];
-                slotIdx--;
-                lm.update(slotPillCount, slotIdx);
             }
 
             ld.accessQueue()->enqueue(LcdMsg(" The schedules  ", "  were updated  ", 1, 3000));
 
-            Serial.println("Local schedules successfully updated:\n");
-
-            serializeJsonPretty(deviceData, Serial);
-
-            Serial.print("\n");
+            Serial.println("Local schedules successfully updated\n");
         }
         else
         {
@@ -504,105 +586,82 @@ void updateSchedule()
     }
 }
 
-void checkSchedule(String userRFID)
-{
-    char l1Buff[LCD_COLUMNS];
-    char l2Buff[LCD_COLUMNS];
+// void checkSchedule(String userRFID)
+// {
+//     char l1Buff[LCD_COLUMNS];
+//     char l2Buff[LCD_COLUMNS];
 
-    getTime();
+//     getTime();
 
-    JsonArray profiles = deviceData["profiles"];
-    JsonArray pillSlots = deviceData["pillSlots"];
+//     bool found = false;
 
-    bool found = false;
+//     Profile *pProf = deviceData.getProfile(userRFID);
 
-    for (JsonObject profile : profiles)
-    {
-        const char *rfid = profile["rfid"];
+//     if (pProf != nullptr)
+//     {
+//         for (int i = 0; i < pProf->getSchedLen(); i++)
+//         {
+//             ScheduleItem *pItem = pProf->getItem(i);
 
-        if (rfid != nullptr && userRFID.equals(rfid))
-        {
-            const char *username = profile["username"];
+//             if (pItem->checkTime(currTime))
+//             {
+//                 if (pItem->getFulfileld())
+//                 {
+//                     sprintf(outputBuffer, "%d:%d schedule item for %s  was already fulfilled today!", pItem->getTimeH(), pItem->getTimeM(), pProf->getUN());
+//                     Serial.println(outputBuffer);
 
-            sprintf(outputBuffer, "Username associated with RFID %s is: %s", userRFID.c_str(), username);
-            Serial.println(outputBuffer);
+//                     ld.accessQueue()->enqueue(LcdMsg("    Already     ", "   fulfilled!   ", 1, 3000));
 
-            sprintf(l2Buff, "     %d:%d      ", currTime[0], currTime[1]);
-            ld.accessQueue()->enqueue(LcdMsg(username, l2Buff, 1, 3000));
+//                     continue;
+//                 }
+//                 else
+//                 {
+//                     found = true;
 
-            JsonArray pillSchedules = profile["pillSchedules"];
+//                     PillSlot *pSlot = deviceData.getPillSlot(pItem->getSlotNum());
 
-            for (JsonObject pillSchedule : pillSchedules)
-            {
-                int hour = pillSchedule["time"]["hour"];
-                int minute = pillSchedule["time"]["minutes"];
-                int slotNumber = pillSchedule["slotNumber"];
+//                     if (pSlot == nullptr)
+//                     {
+//                         Serial.println("Slot not found!");
+//                         continue;
+//                     }
+//                     else
+//                     {
+//                         for (int j = 0; j < pItem->getQuantity(); j++)
+//                         {
+//                             if (!pSlot->checkPillCnt())
+//                             {
+//                                 sprintf(outputBuffer, "Insufficient supply in slot: %d", pItem->getSlotNum());
+//                                 Serial.println(outputBuffer);
 
-                if (pillSchedule["dispensedToday"])
-                {
-                    sprintf(outputBuffer, "%d:%d schedule item for %s  was already fulfilled today!", hour, minute, username);
-                    Serial.println(outputBuffer);
+//                                 break;
+//                             }
+//                             else
+//                             {
+//                                 ds.pushToSeq(pItem->getSlotNum());
+//                                 id.arm();
 
-                    ld.accessQueue()->enqueue(LcdMsg("    Already     ", "   fulfilled!   ", 1, 3000));
+//                                 pSlot->decPillCnt();
+//                                 pItem->check();
 
-                    continue;
-                }
+//                                 sprintf(outputBuffer, "%d:%d | slot: %d", pItem->getTimeH(), pItem->getTimeM(), pItem->getSlotNum());
+//                                 Serial.println(outputBuffer);
+//                             }
+//                         }
 
-                if (abs((hour * 60 + minute) - (currTime[0] * 60 + currTime[1])) < 240)
-                {
-                    found = true;
+//                         lm.update(pSlot->getPillCnt(), pItem->getSlotNum() - 1);
+//                     }
+//                 }
+//             }
+//         }
+//     }
 
-                    JsonObject relevantSlot;
-
-                    for (JsonObject pillSlot : pillSlots)
-                    {
-                        if (pillSlot["slotNumber"] == slotNumber)
-                        {
-                            relevantSlot = pillSlot;
-                            break;
-                        }
-                    }
-
-                    if (!relevantSlot)
-                    {
-                        Serial.println("Slot not found!");
-                        continue;
-                    }
-
-                    for (int i = 0; i < pillSchedule["quantity"]; i++)
-                    {
-                        if (relevantSlot["pillCount"] == 0)
-                        {
-                            sprintf(outputBuffer, "Insufficient supply in slot: %d", slotNumber);
-                            Serial.println(outputBuffer);
-
-                            break;
-                        }
-                        else
-                        {
-                            ds.pushToSeq(slotNumber);
-                            id.arm();
-                            int currPillCount = relevantSlot["pillCount"];
-                            relevantSlot["pillCount"] = currPillCount - 1;
-                            pillSchedule["dispensedToday"] = true;
-
-                            sprintf(outputBuffer, "%d:%d | slot: %d", hour, minute, slotNumber);
-                            Serial.println(outputBuffer);
-                        }
-                    }
-
-                    lm.update(relevantSlot["pillCount"], slotNumber - 1);
-                }
-            }
-        }
-    }
-
-    if (!found)
-    {
-        Serial.println("No schedule items found!");
-        ld.accessQueue()->enqueue(LcdMsg("No sched. items ", "     found!     ", 1, 5000));
-    }
-}
+//     if (!found)
+//     {
+//         Serial.println("No schedule items found!");
+//         ld.accessQueue()->enqueue(LcdMsg("No sched. items ", "     found!     ", 1, 5000));
+//     }
+// }
 
 std::string uint8_tToHexString(const uint8_t *data, size_t len)
 {
