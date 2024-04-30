@@ -1,6 +1,7 @@
 using Dispenser.Api.Extensions;
 using Dispenser.Api.Filters;
 using Dispenser.DataAccess;
+using Dispenser.Dtos.PillSchedules;
 using Dispenser.Dtos.Profiles;
 using Dispenser.Models.Profiles;
 using Dispenser.Services.Identity;
@@ -43,13 +44,16 @@ public static class ProfileRoutes
         return TypedResults.Ok(profile);
     }
 
-    private static async Task<Ok<Profile[]>> GetOwnProfiles(
+    private static async Task<Ok<ProfileWithSchedulesResponse[]>> GetOwnProfiles(
         Db db,
         ICallerService callerService)
     {
         var callerData = callerService.GetCallerData();
         var profiles = await db.Profiles
+            .AsNoTracking()
             .Where(p => p.CreatedById == callerData.Id)
+            .Include(p => p.PillSchedules)
+            .Select(p => p.ToProfileWithSchedulesResponse())
             .ToArrayAsync();
 
         return TypedResults.Ok(profiles);

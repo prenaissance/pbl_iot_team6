@@ -1,4 +1,5 @@
 using Dispenser.Dtos.PillSchedules;
+using Dispenser.Dtos.Profiles;
 using Dispenser.Models.PillSchedules;
 
 namespace Dispenser.Dtos.PillSchedules;
@@ -10,7 +11,8 @@ public static class Extensions
         {
             Id = pillSchedule.Id,
             Times = pillSchedule.Times.Select(TimeOfDay.FromTimeOnly).ToArray(),
-            Quantity = pillSchedule.Quantity
+            Quantity = pillSchedule.Quantity,
+            Profile = pillSchedule.Profile.ToProfileResponse()
         };
 
     public static PillSlotResponse ToPillSlotResponse(this PillSlot pillSlot) =>
