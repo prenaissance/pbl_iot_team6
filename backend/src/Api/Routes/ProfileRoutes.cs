@@ -3,7 +3,7 @@ using Dispenser.Api.Filters;
 using Dispenser.DataAccess;
 using Dispenser.Dtos.Profiles;
 using Dispenser.Models.Profiles;
-using Dispenser.Services.Authentication;
+using Dispenser.Services.Identity;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 

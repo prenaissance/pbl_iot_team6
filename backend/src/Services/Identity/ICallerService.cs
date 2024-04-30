@@ -1,6 +1,4 @@
-namespace Dispenser.Services.Authentication;
-
-using Dispenser.Services.Identity;
+namespace Dispenser.Services.Identity;
 
 public interface ICallerService
 {

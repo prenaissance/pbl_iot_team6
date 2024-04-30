@@ -43,14 +43,14 @@ builder.Services.AddCors(options =>
                                               "https://localhost:5037");
                       });
 });
-builder.Services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly(), ServiceLifetime.Transient);
+builder.Services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly(), ServiceLifetime.Scoped);
 builder.Services.AddDbContext<Db>(options =>
 {
     options.UseNpgsql(configuration.GetValue<string>("PostgresConnection"));
 });
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<IJwtService, JwtService>();
-builder.Services.AddTransient<ICallerService, CallerService>();
+builder.Services.AddScoped<ICallerService, CallerService>();
 string jwtSecret = configuration.GetValue<string>("JwtSecret") ?? "supersecretkey";
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>

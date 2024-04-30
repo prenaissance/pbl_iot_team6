@@ -5,7 +5,7 @@ using Dispenser.Api.Filters;
 using Dispenser.DataAccess;
 using Dispenser.Dtos.PillSchedules;
 using Dispenser.Models.PillSchedules;
-using Dispenser.Services.Authentication;
+using Dispenser.Services.Identity;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 
@@ -21,7 +21,7 @@ public static class PillRoutes
             .WithAuthorization()
             .WithValidation<EditPillSlotRequest>()
             .WithDescription("Edit a pill slot, returns the pill slot without schedules");
-        group.MapPost("/slots/{id}/schedules", AddPillSchedules)
+        group.MapPost("/slots/{id:guid}/schedules", AddPillSchedules)
             .WithAuthorization()
             .WithValidation<AddPillSchedulesRequest>();
         group.MapDelete("/slots/schedules", DeletePillSchedules)
@@ -82,8 +82,8 @@ public static class PillRoutes
     private static async Task<Results<
       Ok<PillSlotResponse>, NotFound>
     > AddPillSchedules(
-        Guid id,
         AddPillSchedulesRequest request,
+        Guid id,
         Db db,
         ICallerService callerService
     )
