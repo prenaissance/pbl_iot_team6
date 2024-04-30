@@ -33,19 +33,36 @@ function NewUser({navigation}){
         })
     } 
     return(
-        <View>
+        <View
+            style={{
+                flex: 1,
+            }}
+        >
             <Text>
                 New User
             </Text>
-            <Image source={require('../icons/user-icon.png')}/>
-            <TextInput
-                placeholder='name'
-                onChangeText={value => setName(value)}
-            />
-            <PillButton
-                text='Create User'
-                onPress={()=> handleSubmit()}
-            />
+            <View
+                style={{
+                    alignItems: 'center',
+                }}
+            >
+                <Image source={require('../icons/user-icon.png')}/>
+                <TextInput
+                    placeholder='name'
+                    onChangeText={value => setName(value)}
+                    style={{
+                        backgroundColor: '#e9e9e9',
+                        width: 400,
+                        height: 40,
+                        borderRadius: 50,
+                    }}
+                />
+                <PillButton
+                    text='Create User'
+                    onPress={()=> handleSubmit()}
+                />
+            </View>
+           
         </View>
     )
 }

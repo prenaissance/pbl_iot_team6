@@ -5,13 +5,21 @@ import Tab from '../shared/tab';
 function Containers({navigation}){
     return(
         <View
+        
             style={{
                 flex: 1,
+                // alignItems: 'center'
             }}
         >
             <Text>
                 CONTAINERS
             </Text>
+            <View
+                style={{
+                    // flex: 1,
+                    alignItems: 'center'
+                }}
+            >
                     <View 
                         style={{
                             marginTop:12
@@ -38,6 +46,8 @@ function Containers({navigation}){
 
                         />
                     </View>
+            </View>
+                    
                         
 
               

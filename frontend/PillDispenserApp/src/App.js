@@ -23,7 +23,6 @@ function App (){
   const backgroundStyle = {
     backgroundColor: isDarkMode ? Colors.darker : Colors.lighter
   }
- 
   return(
     <LoginProvider>
         <NavigationContainer>

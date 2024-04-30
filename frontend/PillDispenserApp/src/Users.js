@@ -13,7 +13,6 @@ function Users({navigation}){
     const {setIsLoggedIn} = useLogin();
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [loginChanged, setLoginChanged] = useState(false);
     const fetchUsers = async() =>{
         const token = await getData('token');
         console.log('awaiting...');
@@ -25,10 +24,8 @@ function Users({navigation}){
                 'Content-Type' : 'application/json',
                 'Authorization' : 'Bearer '+token,
             },
-        })
-        // .then(response => console.log(response))
+        })  
         .then(response => response.json()).then(_data => {
-            // console.log(_data);
             setData(_data);
             console.log("success!");
             setLoading(false);
@@ -38,12 +35,14 @@ function Users({navigation}){
     useEffect(() => {
         // Update the document title using the browser API
         fetchUsers()
-      }, []);
+      }, [navigation]);
     
     const renderItem = ({item}) =>{
         return(
             <View style={{marginBottom:12}}>
-                <Tab type='user' title={item.username} text='Tap to select'/>
+                <Tab type='user' title={item.username} text='Tap to select'
+                    onPress={() => navigation.navigate('OneUser', {schedules: item.pillSchedules, name:item.username, profileId: item.id})}
+                />
             </View>
         )
     }
@@ -54,22 +53,37 @@ function Users({navigation}){
                 flexDirection: 'column',
             }}
         >
-            <Text>
-                USERS
-            </Text>
-            <TouchableOpacity onPress={async() =>  {
-                    await AsyncStorage.removeItem('token');
-                    setIsLoggedIn(false);
-                }}>
-            <Text
-                style={{color:'red'}}
-            >
-                Log Out
-            </Text>
-            </TouchableOpacity>
+            <View style={{
+                // flex:1,
+                // flexDirection: 'row',
+                // justifyContent: 'space-between'
+            }}>
+                <Text>
+                    USERS
+                </Text>
+                <TouchableOpacity onPress={async() =>  {
+                        await AsyncStorage.removeItem('token');
+                        setIsLoggedIn(false);
+                    }}>
+                <Text
+                    style={{color:'red'}}
+                >
+                    Log Out
+                </Text>
+                </TouchableOpacity>
+            </View>
+            
             
 
+            <View style={{
+                flex: 1,
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignContent: 'center',
+                alignItems: 'center'
+            }}>
             <SearchBar/>
+
             {loading 
                 ?   <ActivityIndicator
                         size={'large'}
@@ -80,15 +94,14 @@ function Users({navigation}){
                         keyExtractor={item=>item.id}
                     />
             }
-           
-                
 
             <TouchableOpacity
                  style={{
                     height: 50,
                     width: 50,
                     // backgroundColor: '#00C780',
-                    borderRadius: 50
+                    borderRadius: 50,
+                    // alignSelf: 'center'
                 }}
                 onPress={() => navigation.navigate('NewUser')}
             >
@@ -100,6 +113,11 @@ function Users({navigation}){
                     }}    
                 />
             </TouchableOpacity>
+            </View>
+           
+                
+
+            
         </View>
     )
 }
