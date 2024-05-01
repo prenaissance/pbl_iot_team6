@@ -28,6 +28,11 @@ public:
         lifetime -= dt;
         return lifetime > 0;
     }
+
+    int getLifetime()
+    {
+        return lifetime;
+    }
 };
 
 class MsgQueue
@@ -94,6 +99,11 @@ public:
     LcdMsg *accessCurr(int currentIdx)
     {
         return &queue[currentIdx];
+    }
+
+    int getQueueSize()
+    {
+        return queueSize;
     }
 };
 

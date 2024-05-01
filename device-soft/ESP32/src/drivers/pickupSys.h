@@ -64,21 +64,18 @@ public:
 
     void detect()
     {
-        if (armed)
+        if (!detected)
         {
-            if (!detected)
+            if (digitalRead(signalPin) == LOW)
             {
-                if (digitalRead(signalPin) == LOW)
-                {
-                    detected = true;
-                }
+                detected = true;
             }
-            else
+        }
+        else
+        {
+            if (digitalRead(signalPin) == HIGH)
             {
-                if (digitalRead(signalPin) == HIGH)
-                {
-                    picked = true;
-                }
+                picked = true;
             }
         }
     }
@@ -95,17 +92,17 @@ public:
 
     int check()
     {
-        if (millis() - armTime > 30000)
+        if (millis() - armTime > 10000)
         {
             reset();
-            return 0;
+            return -1;
         }
-        else if (millis() - armTime > 15000)
+        else if (millis() - armTime > 5000)
         {
             if (!detected)
             {
-                return 1;
                 reset();
+                return 3;
             }
             else if (detected && !picked)
             {
@@ -114,12 +111,12 @@ public:
             else
             {
                 reset();
-                return 0;
+                return 1;
             }
         }
         else
         {
-            return -1;
+            return 0;
         }
     }
 };

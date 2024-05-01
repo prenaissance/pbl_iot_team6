@@ -10,7 +10,7 @@ private:
 
 public:
     ScheduleItem() {}
-    ScheduleItem(int h, int m, int sn, int q) : time({h, m}), slotNum(sn), fulfilled(false) {}
+    ScheduleItem(int h, int m, int sn, int q) : time({h, m}), slotNum(sn), fulfilled(false), quantity(q) {}
 
     int getTimeH()
     {
@@ -47,9 +47,9 @@ public:
         fulfilled = false;
     }
 
-    bool checkTime(int currTime[2])
+    bool checkTime(int hour, int minute)
     {
-        return abs((time[0] * 60 + time[1]) - (currTime[0] * 60 + currTime[1])) < 30;
+        return abs((time[0] * 60 + time[1]) - (hour * 60 + minute)) < 30;
     };
 };
 
@@ -207,5 +207,31 @@ public:
         }
 
         return slotPtr;
+    }
+
+    void status()
+    {
+        Serial.println("==========\nPill slots:");
+
+        for (int i = 0; i < 2; i++)
+        {
+            Serial.println("   " + String(i + 1) + ". " + String(pillSlots[i].getPillName()) + " (" + String(pillSlots[i].getPillCnt()) + ")");
+        }
+
+        Serial.print("\nProfiles & Schedules:\n");
+
+        for (int i = 0; i < profilesSize; i++)
+        {
+            Serial.println("   " + String(i + 1) + ". " + String(profiles[i].getUN()) + " (" + String(profiles[i].getRUID()) + "): " + String(profiles[i].getSchedLen()));
+
+            for (int j = 0; j < profiles[i].getSchedLen(); j++)
+            {
+                ScheduleItem *pItem = profiles[i].getItem(j);
+
+                Serial.println("      * " + String(pItem->getTimeH()) + ':' + String(pItem->getTimeM()) + " | " + String(pItem->getSlotNum()) + " (" + String(pItem->getQuantity()) + ") - " + String(pItem->getFulfileld()));
+            }
+        }
+
+        Serial.println("==========\n");
     }
 };
