@@ -93,6 +93,11 @@ public class Db(DbContextOptions options) : DbContext(options)
             .WithMany(p => p.PillSchedules)
             .HasForeignKey(s => s.ProfileId)
             .OnDelete(DeleteBehavior.Cascade);
+        pillSchedule.HasIndex(s => new
+        {
+            s.PillSlotId,
+            s.ProfileId,
+        }).IsUnique();
         pillSchedule.HasData([
             new() {
                 Id = new Guid("b1b1b1b1-b1b1-b1b1-b1b1-b1b1b1b1b1b1"),

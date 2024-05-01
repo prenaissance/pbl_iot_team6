@@ -2,5 +2,6 @@ namespace Dispenser.Dtos.PillSchedules;
 
 public record EditPillScheduleRequest(
     Guid Id,
-    List<TimeOfDay> Times
+    List<TimeOfDay> Times,
+    int Quantity
 );

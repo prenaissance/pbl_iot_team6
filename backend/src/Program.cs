@@ -87,7 +87,11 @@ app.UseHttpLogging();
 app.UseSwagger();
 app.UseSwaggerUI();
 
-// app.UseHttpsRedirection();
+if (app.Environment.IsProduction())
+{
+    app.UseHsts();
+    app.UseHttpsRedirection();
+}
 app.UseAuthentication();
 app.UseAuthorization();
 

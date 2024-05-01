@@ -163,6 +163,7 @@ public static class PillRoutes
         }
 
         pillSchedule.Times = request.Times.Select(t => t.ToTimeOnly()).ToList();
+        pillSchedule.Quantity = request.Quantity;
 
         db.SaveChanges();
 
