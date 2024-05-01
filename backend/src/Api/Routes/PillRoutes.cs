@@ -44,6 +44,7 @@ public static class PillRoutes
         var pillSlots = await db.PillSlots
             .Where(ps => ps.OwnerId == callerData.Id)
             .Include(ps => ps.PillSchedules)
+            .ThenInclude(ps => ps.Profile)
             .ToArrayAsync();
 
         var pillSlotsResponses = pillSlots
