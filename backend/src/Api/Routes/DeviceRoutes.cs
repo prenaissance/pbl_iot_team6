@@ -14,7 +14,7 @@ public static class DeviceRoutes
     {
         var group = routes.MapGroup("/devices");
 
-        group.MapGet("/{deviceId}/config", GetConfig)
+        group.MapGet("/{deviceId:guid}/config", GetConfig)
             .WithDescription("Get the device configuration. Rfid encoded in base64.")
             .WithOpenApi(
                 config =>
@@ -73,9 +73,9 @@ public static class DeviceRoutes
             }).ToArray(),
             PillSlots = db.PillSchedules
                 .Where(ps => ps.PillSlot.OwnerId == owner.Id)
-                .DistinctBy(ps => ps.PillSlot.SlotNumber)
                 .OrderBy(ps => ps.PillSlot.SlotNumber)
                 .AsEnumerable()
+                .DistinctBy(ps => ps.PillSlot.SlotNumber)
                 .Select(ps => ConfigPillSlot.FromPillSlot(ps.PillSlot))
                 .ToArray()
         };
