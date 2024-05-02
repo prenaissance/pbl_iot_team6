@@ -144,11 +144,8 @@ public:
 
             if (current != -1)
             {
-                display(mq.accessCurr(current)->getL1(), mq.accessCurr(current)->getL2());
-            }
-            else
-            {
                 reset();
+                display(mq.accessCurr(current)->getL1(), mq.accessCurr(current)->getL2());
             }
         }
 
@@ -157,7 +154,6 @@ public:
 
     void display(const char *l1, const char *l2)
     {
-        reset();
         lcd->print(l1);
         lcd->setCursor(0, 1);
         lcd->print(l2);

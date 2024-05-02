@@ -107,6 +107,7 @@ ESP32Time rtc(0);
 bool timeUpd;
 
 std::string getCurrTimeFmt();
+std::string getCurrDateFmt();
 
 void setup()
 {
@@ -322,11 +323,16 @@ void loop()
 
     if (ld.accessQueue()->getQueueSize() == 0)
     {
-        std::string fmt = getCurrTimeFmt();
-        char line[LCD_COLUMNS + 1];
+        std::string fmt1 = getCurrTimeFmt();
+        std::string fmt2 = getCurrDateFmt();
 
-        sprintf(line, fmt.c_str(), rtc.getHour(true), rtc.getMinute());
-        ld.accessQueue()->enqueue(LcdMsg(line, "", 1, 1));
+        char line1[LCD_COLUMNS + 1];
+        char line2[LCD_COLUMNS + 1];
+
+        sprintf(line1, fmt1.c_str(), rtc.getHour(true), rtc.getMinute());
+        sprintf(line2, fmt2.c_str(), rtc.getDay(), rtc.getMonth() + 1, rtc.getYear());
+
+        ld.accessQueue()->enqueue(LcdMsg(line1, line2, 1, 1));
     }
 
     ld.update();
@@ -357,6 +363,33 @@ std::string getCurrTimeFmt()
     else
     {
         fmt = "     %d:%d      ";
+    }
+
+    return fmt;
+}
+
+std::string getCurrDateFmt()
+{
+    std::string fmt;
+
+    bool f1 = rtc.getDay() < 10;
+    bool f2 = rtc.getMonth() + 1 < 10;
+
+    if (f1 && f2)
+    {
+        fmt = "   0%d/0%d/%d   ";
+    }
+    else if (f1)
+    {
+        fmt = "   0%d/%d/%d   ";
+    }
+    else if (f2)
+    {
+        fmt = "   %d/0%d/%d   ";
+    }
+    else
+    {
+        fmt = "   %d/%d/%d   ";
     }
 
     return fmt;

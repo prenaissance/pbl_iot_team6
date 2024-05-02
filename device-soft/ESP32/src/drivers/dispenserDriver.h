@@ -9,8 +9,8 @@ public:
     DispenserDriver(Servo *pm) : pMotor(pm)
     {
         pMotor->write(initAngle);
-        angle[0] = -47;
-        angle[1] = 41;
+        angle[0] = -52;
+        angle[1] = 40;
     }
 
     void dispence(int cNum)
