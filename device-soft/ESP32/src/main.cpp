@@ -2,6 +2,9 @@
 #include <ArduinoJson.h>
 
 #include "BluetoothSerial.h"
+#include <WiFi.h>
+#include <WiFiUdp.h>
+#include <NTPClient.h>
 
 #include <MFRC522.h>
 #include <SPI.h>
@@ -95,6 +98,7 @@ bool dataUpd;
 #define BT_RFID_GET_REQ_CODE 1
 #define BT_DUID_GET_REQ_CODE 2
 #define BT_DATA_UPD_REQ_CODE 4
+#define BT_WIFI_SET_REQ_CODE 5
 
 static BluetoothSerial SerialBT;
 String receivedMsg;
@@ -105,6 +109,22 @@ void bluetoothReqHandler(String);
 
 ESP32Time rtc(0);
 bool timeUpd;
+
+// WiFi
+
+#define WIFI_CONNECT_TIMEOUT 10000
+
+char ssid[50];
+char pass[50];
+unsigned long conTimer;
+unsigned long lastConAtt;
+
+// NTP
+
+#define NTP_SERVER_HOST "pool.ntp.org"
+int utcOffset;
+
+void ntpTimeUpd();
 
 std::string getCurrTimeFmt();
 std::string getCurrDateFmt();
@@ -180,6 +200,8 @@ void setup()
     dataUpd = false;
     RFID_req = false;
 
+    conTimer = 0;
+
     ld.accessQueue()->enqueue(LcdMsg("     Setup      ", "   finsihed!    ", 1, 2000));
     ld.update();
 
@@ -203,74 +225,113 @@ void loop()
         }
     }
 
-    if (!timeUpd || !dataUpd)
+    if (WiFi.status() != WL_CONNECTED)
     {
-        if (!timeUpd)
-        {
-            if (ld.accessQueue()->getQueueSize() == 0)
-            {
-                ld.accessQueue()->enqueue(LcdMsg("Set up sys time ", "via application ", 1, 1));
-            }
+        Serial.print("No WiFi connection: ");
 
-            Serial.println("Time is not set up!");
+        if (strlen(ssid) > 0 && strlen(pass) > 0)
+        {
+            sprintf(outputBuffer, "attempting to connect to %s", ssid);
+            Serial.println(outputBuffer);
+
+            WiFi.begin(ssid, pass);
+
+            conTimer += millis() - lastConAtt;
+            lastConAtt = millis();
+
+            if (conTimer > WIFI_CONNECT_TIMEOUT)
+            {
+                memset(ssid, '\0', sizeof(ssid));
+                memset(pass, '\0', sizeof(pass));
+
+                Serial.println("WiFi connection attempt timed out... turning on BT\n");
+                SerialBT.begin(BT_DEVICE_NAME);
+            }
         }
-        else if (!dataUpd)
+        else
         {
-            if (ld.accessQueue()->getQueueSize() == 0)
-            {
-                ld.accessQueue()->enqueue(LcdMsg("Set up sys time ", "via application ", 1, 1));
-            }
-
-            ld.accessQueue()->enqueue(LcdMsg("Upload sys data ", "via application ", 1, 1));
-            Serial.println("Device data is not updated!");
+            Serial.println("provide WiFi details via Bluetooth");
         }
     }
     else
     {
-        if (ds.checkSeq())
+        if (!timeUpd || !dataUpd)
         {
-            ds.displaySequence();
-            ds.dispence();
-        }
-        else if (RFID_req)
-        {
-            if (rm.isNewCardRead())
+            if (!timeUpd)
             {
-                rm.readUid();
+                Serial.println("Time is not set up!");
+                ntpTimeUpd();
 
-                sprintf(outputBuffer, "Requested UUID: %s\n", rm.getCachedUid());
-                Serial.println(outputBuffer);
+                std::string fmt1 = getCurrTimeFmt();
+                std::string fmt2 = getCurrDateFmt();
 
-                String RFID_data = rm.getCachedUid();
+                char line1[LCD_COLUMNS + 1];
+                char line2[LCD_COLUMNS + 1];
 
-                String response = "\"{\"resCode\":" + String(BT_RFID_GET_REQ_CODE) + ", \"payload\":{\"rfid\":\"" + RFID_data + "\"}}\"";
-                SerialBT.println(response);
+                sprintf(line1, fmt1.c_str(), rtc.getHour(true), rtc.getMinute());
+                sprintf(line2, fmt2.c_str(), rtc.getDay(), rtc.getMonth() + 1, rtc.getYear());
 
-                char line[LCD_COLUMNS + 1];
-                sprintf(line, "    %s    ", RFID_data);
-                ld.accessQueue()->enqueue(LcdMsg("   Tag read:    ", line, 1, 6000));
+                Serial.println(line1);
+                Serial.println(line2);
+            }
+            else if (!dataUpd)
+            {
+                // if (ld.accessQueue()->getQueueSize() == 0)
+                // {
+                //     ld.accessQueue()->enqueue(LcdMsg("Set up sys time ", "via application ", 1, 1));
+                // }
 
-                Serial.println("Responded with RFID ID read\n");
-
-                RFID_req = false;
+                // ld.accessQueue()->enqueue(LcdMsg("Upload sys data ", "via application ", 1, 1));
+                Serial.println("Device data is not updated!");
             }
         }
-        else if (!RFID_req)
+        else
         {
-            if (rm.isNewCardRead())
+            if (ds.checkSeq())
             {
-                rm.readUid();
+                ds.displaySequence();
+                ds.dispence();
+            }
+            else if (RFID_req)
+            {
+                if (rm.isNewCardRead())
+                {
+                    rm.readUid();
 
-                String RFID_data = rm.getCachedUid();
+                    sprintf(outputBuffer, "Requested UUID: %s\n", rm.getCachedUid());
+                    Serial.println(outputBuffer);
 
-                char line[LCD_COLUMNS + 1];
-                sprintf(line, "    %s    ", RFID_data);
-                ld.accessQueue()->enqueue(LcdMsg("   Tag read:    ", line, 1, 2000));
+                    String RFID_data = rm.getCachedUid();
 
-                sprintf(outputBuffer, "Approached UUID: %s\n", rm.getCachedUid());
-                Serial.println(outputBuffer);
+                    String response = "\"{\"resCode\":" + String(BT_RFID_GET_REQ_CODE) + ", \"payload\":{\"rfid\":\"" + RFID_data + "\"}}\"";
+                    SerialBT.println(response);
 
-                checkSchedule(rm.getCachedUid());
+                    char line[LCD_COLUMNS + 1];
+                    sprintf(line, "    %s    ", RFID_data);
+                    ld.accessQueue()->enqueue(LcdMsg("   Tag read:    ", line, 1, 6000));
+
+                    Serial.println("Responded with RFID ID read\n");
+
+                    RFID_req = false;
+                }
+            }
+            else if (!RFID_req)
+            {
+                if (rm.isNewCardRead())
+                {
+                    rm.readUid();
+
+                    String RFID_data = rm.getCachedUid();
+
+                    char line[LCD_COLUMNS + 1];
+                    sprintf(line, "    %s    ", RFID_data);
+                    ld.accessQueue()->enqueue(LcdMsg("   Tag read:    ", line, 1, 2000));
+
+                    sprintf(outputBuffer, "Approached UUID: %s\n", rm.getCachedUid());
+                    Serial.println(outputBuffer);
+
+                    checkSchedule(rm.getCachedUid());
+                }
             }
         }
     }
@@ -399,7 +460,7 @@ void bluetoothReqHandler(String reqString)
 {
     char serializedData[4096];
 
-    reqString.replace(" ", "");
+    // reqString.replace(" ", "");
     reqString.replace("\n", "");
     reqString.trim();
     reqString.remove(0, 1);
@@ -444,6 +505,7 @@ void bluetoothReqHandler(String reqString)
         Serial.println("Time successfully updated!");
     }
     break;
+
     case BT_DATA_UPD_REQ_CODE:
     {
         deviceData = DeviceData();
@@ -513,6 +575,20 @@ void bluetoothReqHandler(String reqString)
         ld.accessQueue()->enqueue(LcdMsg("    Approach    ", "    your tag    ", 1, 4000));
 
         Serial.println("RFID reading requset detected\n");
+    }
+    break;
+
+    case BT_WIFI_SET_REQ_CODE:
+    {
+        strcpy(ssid, payload["ssid"]);
+        strcpy(pass, payload["pass"]);
+        utcOffset = payload["utcOffset"];
+
+        Serial.println("WiFi details received... shutting down BT\n");
+        SerialBT.end();
+
+        conTimer = 0;
+        lastConAtt = millis();
     }
     break;
 
@@ -626,4 +702,31 @@ std::string uuid4Format(const std::string &uuid_str)
         uuid_str.substr(20);
 
     return formatted_uuid;
+}
+
+void ntpTimeUpd()
+{
+    WiFiUDP ntpUDP;
+    NTPClient timeClient(ntpUDP, NTP_SERVER_HOST, 0);
+
+    timeClient.begin();
+    timeClient.update();
+
+    unsigned long epochTime = timeClient.getEpochTime();
+    struct tm *ptm = gmtime((time_t *)&epochTime);
+
+    int year = ptm->tm_year + 1900;
+    int month = ptm->tm_mon + 1;
+    int day = ptm->tm_mday;
+    int hour = ptm->tm_hour;
+    int minute = ptm->tm_min;
+    int second = ptm->tm_sec;
+
+    rtc.setTime(second, minute, hour, day, month, year);
+    rtc.offset = utcOffset;
+
+    timeClient.end();
+
+    timeUpd = true;
+    Serial.println("Time successfully updated!");
 }
