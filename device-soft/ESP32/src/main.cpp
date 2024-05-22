@@ -5,6 +5,7 @@
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <NTPClient.h>
+#include <PubSubClient.h>
 
 #include <MFRC522.h>
 #include <SPI.h>
@@ -26,6 +27,8 @@
 
 #define BAUD_RATE 9600
 
+#define DD_TRANSM_SIZE 1024
+
 #define SERVO_PIN 15
 
 #define LED1_R 26
@@ -41,10 +44,13 @@
 #define LCD_COLUMNS 16
 #define LCD_LINES 2
 
+#define SDA_PIN 21
+#define SCL_PIN 22
+
 #define SS_PIN 17
 #define RST_PIN 4
 
-#define BT_DEVICE_NAME "ESP32"
+#define BT_DEVICE "ESP32"
 
 // Use this buffer for f-output
 
@@ -87,18 +93,18 @@ bool RFID_req;
 
 static DeviceData deviceData;
 
-void updateSchedule();
+void saveData(JsonObject);
 void checkSchedule(String);
 
 bool dataUpd;
 
-// Main communication channel declaration
+// BT
 
-#define BT_TIME_UPD_REQ_CODE 0
-#define BT_RFID_GET_REQ_CODE 1
-#define BT_DUID_GET_REQ_CODE 2
-#define BT_DATA_UPD_REQ_CODE 4
-#define BT_WIFI_SET_REQ_CODE 5
+#define BT_TIME_UPD_REQ 0
+#define BT_RFID_GET_REQ 1
+#define BT_DUID_GET_REQ 2
+#define BT_DATA_UPD_REQ 4
+#define BT_WIFI_SET_REQ 5
 
 static BluetoothSerial SerialBT;
 String receivedMsg;
@@ -119,9 +125,9 @@ char pass[50];
 unsigned long conTimer;
 unsigned long lastConAtt;
 
-// NTP
+// NTP & TIME
 
-#define NTP_SERVER_HOST "pool.ntp.org"
+#define NTP_SERVER "pool.ntp.org"
 int utcOffset;
 
 void ntpTimeUpd();
@@ -129,10 +135,92 @@ void ntpTimeUpd();
 std::string getCurrTimeFmt();
 std::string getCurrDateFmt();
 
+// MQTT
+
+#define MQTT_SERVER "91.121.93.94"
+
+char mqttClientId[100];
+
+char dataTopic[100];
+char telemetryTopic[100];
+
+WiFiClient wifiClient;
+PubSubClient mqttClient(wifiClient);
+
+void mqttCallback(char *topic, byte *payload, unsigned int payloadLen)
+{
+    Serial.print("Message arrived [");
+    Serial.print(topic);
+    Serial.println("]: ");
+
+    char serializedData[DD_TRANSM_SIZE];
+
+    for (int i = 0; i < payloadLen; i++)
+    {
+        serializedData[i] = (char)payload[i];
+    }
+
+    // for (int i = payloadLen - 1; i >= 0; i--)
+    // {
+    //     if (serializedData[i] == '"')
+    //     {
+    //         serializedData[i + 1] = '\0';
+    //         break;
+    //     }
+    // }
+
+    sprintf(outputBuffer, "%s\n", serializedData);
+    Serial.println(outputBuffer);
+
+    // if (strcmp(topic, dataTopic) == 0)
+    // {
+    // DynamicJsonDocument dataJSON(DD_TRANSM_SIZE);
+    // DeserializationError err = deserializeJson(dataJSON, serializedData);
+
+    // if (err)
+    // {
+    //     Serial.print(F("deserializeJson() failed with code "));
+    //     Serial.println(err.f_str());
+    //     Serial.println("\n");
+
+    //     return;
+    // }
+
+    // JsonObject dataObj = dataJSON["payload"];
+    // saveData(dataObj);
+
+    // dataUpd = true;
+    // deviceData.status();
+
+    // ld.accessQueue()->enqueue(LcdMsg("  Device data   ", "   uploaded!    ", 1, 2000));
+
+    // Serial.println("Device data successfully updated\n");
+    // }
+}
+
+void mqttReconnect()
+{
+    if (mqttClient.connect(mqttClientId))
+    {
+        Serial.println(" Reconnected sucessfully!");
+
+        mqttClient.subscribe(dataTopic);
+    }
+    else
+    {
+        Serial.print(" Reconnection failed: rc=");
+        Serial.print(mqttClient.state());
+        Serial.println(". Retry on the next tic...");
+    }
+}
+
 void setup()
 {
-    Wire.begin();
+    // INTERFACES
+
     Serial.begin(BAUD_RATE);
+    Wire.begin();
+    Wire.setPins(SDA_PIN, SCL_PIN);
 
     Serial.println("\n\nSetup logs:\n");
 
@@ -172,7 +260,7 @@ void setup()
 
     // BT
 
-    SerialBT.begin(BT_DEVICE_NAME);
+    SerialBT.begin(BT_DEVICE);
 
     // Motor
 
@@ -196,6 +284,27 @@ void setup()
 
     Serial.println("VI. RFID manager initialized successfully\n");
 
+    // MQTT
+
+    stpcpy(mqttClientId, "IntelliDose:");
+    strcat(mqttClientId, deviceIdBase64.c_str());
+
+    strcpy(dataTopic, ("IntelliDose/" + deviceIdBase64 + "/dataTopic").c_str());
+    strcpy(telemetryTopic, ("IntelliDose/" + deviceIdBase64 + "/telemetryTopic").c_str());
+
+    sprintf(outputBuffer, "Data topic name: %s", dataTopic);
+    Serial.println(outputBuffer);
+    sprintf(telemetryTopic, "Telemetry topic name: %s\n", telemetryTopic);
+    Serial.println(telemetryTopic);
+
+    mqttClient.setBufferSize(DD_TRANSM_SIZE);
+    mqttClient.setServer(MQTT_SERVER, 1883);
+    mqttClient.setCallback(mqttCallback);
+
+    Serial.println("VI. MQTT set up successfully\n");
+
+    // FINISH
+
     timeUpd = false;
     dataUpd = false;
     RFID_req = false;
@@ -210,6 +319,8 @@ void setup()
 
 void loop()
 {
+    Wire.begin();
+
     while (SerialBT.available())
     {
         char incomingChar = SerialBT.read();
@@ -234,9 +345,10 @@ void loop()
             sprintf(outputBuffer, "attempting to connect to %s", ssid);
             Serial.println(outputBuffer);
 
+            WiFi.mode(WIFI_STA);
             WiFi.begin(ssid, pass);
 
-            conTimer += millis() - lastConAtt;
+            conTimer += (millis() - lastConAtt);
             lastConAtt = millis();
 
             if (conTimer > WIFI_CONNECT_TIMEOUT)
@@ -245,7 +357,11 @@ void loop()
                 memset(pass, '\0', sizeof(pass));
 
                 Serial.println("WiFi connection attempt timed out... turning on BT\n");
-                SerialBT.begin(BT_DEVICE_NAME);
+
+                WiFi.disconnect(true);
+                WiFi.mode(WIFI_OFF);
+
+                SerialBT.begin(BT_DEVICE);
             }
         }
         else
@@ -255,6 +371,16 @@ void loop()
     }
     else
     {
+        if (!mqttClient.connected())
+        {
+            Serial.print("MQTT connection lost! Attempting reconnection... ");
+            mqttReconnect();
+        }
+        else
+        {
+            mqttClient.loop();
+        }
+
         if (!timeUpd || !dataUpd)
         {
             if (!timeUpd)
@@ -303,7 +429,7 @@ void loop()
 
                     String RFID_data = rm.getCachedUid();
 
-                    String response = "\"{\"resCode\":" + String(BT_RFID_GET_REQ_CODE) + ", \"payload\":{\"rfid\":\"" + RFID_data + "\"}}\"";
+                    String response = "\"{\"resCode\":" + String(BT_RFID_GET_REQ) + ", \"payload\":{\"rfid\":\"" + RFID_data + "\"}}\"";
                     SerialBT.println(response);
 
                     char line[LCD_COLUMNS + 1];
@@ -458,15 +584,15 @@ std::string getCurrDateFmt()
 
 void bluetoothReqHandler(String reqString)
 {
-    char serializedData[4096];
+    char serializedData[DD_TRANSM_SIZE];
 
     // reqString.replace(" ", "");
     reqString.replace("\n", "");
     reqString.trim();
     reqString.remove(0, 1);
-    reqString.toCharArray(serializedData, 3072);
+    reqString.toCharArray(serializedData, DD_TRANSM_SIZE);
 
-    DynamicJsonDocument reqJSON(4096);
+    DynamicJsonDocument reqJSON(DD_TRANSM_SIZE);
     DeserializationError err = deserializeJson(reqJSON, serializedData);
 
     if (err)
@@ -474,6 +600,8 @@ void bluetoothReqHandler(String reqString)
         Serial.print(F("deserializeJson() failed with code "));
         Serial.println(err.f_str());
         Serial.println("\n");
+
+        return;
     }
 
     int reqCode = reqJSON["reqCode"];
@@ -481,7 +609,7 @@ void bluetoothReqHandler(String reqString)
 
     switch (reqCode)
     {
-    case BT_TIME_UPD_REQ_CODE:
+    case BT_TIME_UPD_REQ:
     {
         int gmtOffset = payload["gmtOffset"];
 
@@ -506,46 +634,9 @@ void bluetoothReqHandler(String reqString)
     }
     break;
 
-    case BT_DATA_UPD_REQ_CODE:
+    case BT_DATA_UPD_REQ:
     {
-        deviceData = DeviceData();
-
-        // Record pill slots
-
-        JsonArray pillSlots = payload["pillSlots"];
-        for (JsonObject pillSlot : pillSlots)
-        {
-            int slotNumber = pillSlot["slotNumber"];
-            const char *pillName = pillSlot["pillName"];
-            int pillCount = pillSlot["pillCount"];
-
-            deviceData.addPillSlot(PillSlot(pillName, pillCount), slotNumber);
-            lm.update(pillCount, slotNumber - 1);
-        }
-
-        // Record profiles and their schedules
-
-        JsonArray profiles = payload["profiles"];
-        for (JsonObject profile : profiles)
-        {
-            const char *username = profile["username"];
-            const char *RFID_UID = profile["rfid"];
-
-            deviceData.addProfile(Profile(username, RFID_UID));
-
-            Profile *pProf = deviceData.getProfile(String(RFID_UID));
-
-            JsonArray pillSchedules = profile["pillSchedules"];
-            for (JsonObject pillSchedule : pillSchedules)
-            {
-                int hour = pillSchedule["time"]["hour"];
-                int minute = pillSchedule["time"]["minutes"];
-                int slotNumber = pillSchedule["slotNumber"];
-                int quantity = pillSchedule["quantity"];
-
-                pProf->addItem(ScheduleItem(hour, minute, slotNumber, quantity));
-            }
-        }
+        saveData(payload);
 
         dataUpd = true;
         deviceData.status();
@@ -556,9 +647,9 @@ void bluetoothReqHandler(String reqString)
     }
     break;
 
-    case BT_DUID_GET_REQ_CODE:
+    case BT_DUID_GET_REQ:
     {
-        String response = "\"{\"resCode\":" + String(BT_DUID_GET_REQ_CODE) + ", \"payload\":{\"deviceIdBase64\":\"" + String(deviceIdBase64.c_str()) + "\"}}\"";
+        String response = "\"{\"resCode\":" + String(BT_DUID_GET_REQ) + ", \"payload\":{\"deviceIdBase64\":\"" + String(deviceIdBase64.c_str()) + "\"}}\"";
         SerialBT.println(response);
 
         ld.accessQueue()->enqueue(LcdMsg(" Responded with ", " device's UUID  ", 1, 2000));
@@ -567,7 +658,7 @@ void bluetoothReqHandler(String reqString)
     }
     break;
 
-    case BT_RFID_GET_REQ_CODE:
+    case BT_RFID_GET_REQ:
     {
         RFID_req = true;
 
@@ -578,7 +669,7 @@ void bluetoothReqHandler(String reqString)
     }
     break;
 
-    case BT_WIFI_SET_REQ_CODE:
+    case BT_WIFI_SET_REQ:
     {
         strcpy(ssid, payload["ssid"]);
         strcpy(pass, payload["pass"]);
@@ -707,7 +798,7 @@ std::string uuid4Format(const std::string &uuid_str)
 void ntpTimeUpd()
 {
     WiFiUDP ntpUDP;
-    NTPClient timeClient(ntpUDP, NTP_SERVER_HOST, 0);
+    NTPClient timeClient(ntpUDP, NTP_SERVER, 0);
 
     timeClient.begin();
     timeClient.update();
@@ -729,4 +820,48 @@ void ntpTimeUpd()
 
     timeUpd = true;
     Serial.println("Time successfully updated!");
+}
+
+void saveData(JsonObject payload)
+{
+    deviceData = DeviceData();
+
+    // Record pill slots
+
+    JsonArray pillSlots = payload["pillSlots"];
+    for (JsonObject pillSlot : pillSlots)
+    {
+        int slotNumber = pillSlot["slotNumber"];
+        const char *pillName = pillSlot["pillName"];
+        int pillCount = pillSlot["pillCount"];
+
+        Serial.println(String(slotNumber) + " " + String(pillName));
+
+        deviceData.addPillSlot(PillSlot(pillName, pillCount), slotNumber);
+        lm.update(pillCount, slotNumber - 1);
+    }
+
+    // Record profiles and their schedules
+
+    JsonArray profiles = payload["profiles"];
+    for (JsonObject profile : profiles)
+    {
+        const char *username = profile["username"];
+        const char *RFID_UID = profile["rfid"];
+
+        deviceData.addProfile(Profile(username, RFID_UID));
+
+        Profile *pProf = deviceData.getProfile(String(RFID_UID));
+
+        JsonArray pillSchedules = profile["pillSchedules"];
+        for (JsonObject pillSchedule : pillSchedules)
+        {
+            int hour = pillSchedule["time"]["hour"];
+            int minute = pillSchedule["time"]["minutes"];
+            int slotNumber = pillSchedule["slotNumber"];
+            int quantity = pillSchedule["quantity"];
+
+            pProf->addItem(ScheduleItem(hour, minute, slotNumber, quantity));
+        }
+    }
 }
