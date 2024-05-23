@@ -96,6 +96,7 @@ routes
     .RegisterAuthenticationRoutes()
     .RegisterProfileRoutes()
     .RegisterPillRoutes()
-    .RegisterDeviceRoutes();
+    .RegisterDeviceRoutes()
+    .RegisterProcessedEventsRoutes();
 
 app.Run();

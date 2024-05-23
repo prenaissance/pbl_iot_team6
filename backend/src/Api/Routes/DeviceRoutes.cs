@@ -1,6 +1,9 @@
+using Dispenser.Api.Filters;
 using Dispenser.DataAccess;
 using Dispenser.Dtos.Device.Config;
+using Dispenser.Dtos.Device.Events;
 using Dispenser.Dtos.PillSchedules;
+using Dispenser.Models.Audit;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Any;
@@ -38,10 +41,34 @@ public static class DeviceRoutes
                 }
             );
 
+        group.MapPost("/{deviceId:guid}/event", AddEvent)
+            .WithValidation<AddEventRequest>()
+            .WithDescription("Add an event to the device audit log")
+            .WithOpenApi(
+                config =>
+                {
+                    config.Parameters = [
+                        new OpenApiParameter
+                        {
+                            Name = "deviceId",
+                            In = ParameterLocation.Path,
+                            Required = true,
+                            Schema = new OpenApiSchema
+                            {
+                                Type = "string",
+                                Format = "uuid"
+                            },
+                            Example = new OpenApiString("11111111-1111-1111-1111-111111111111")
+                        }
+                    ];
+                    return config;
+                }
+            );
+
         return routes;
     }
 
-    public static async Task<Results<Ok<ConfigResponse>, NotFound<string>>> GetConfig(Guid deviceId, Db db)
+    private static async Task<Results<Ok<ConfigResponse>, NotFound<string>>> GetConfig(Guid deviceId, Db db)
     {
         var owner = await db.Owners
             .Where(o => o.DeviceId == deviceId)
@@ -81,5 +108,22 @@ public static class DeviceRoutes
         };
 
         return TypedResults.Ok(config);
+    }
+
+    private static async Task<Created> AddEvent(
+        [AsParameters] AddEventRequest request,
+        Db db)
+    {
+        await db.ProcessedEvents.AddAsync(new ProcessedEvent
+        {
+            DeviceId = request.DeviceId,
+            EventType = request.Body.EventType,
+            EventData = request.Body.EventData,
+            ProfileId = request.Body.ProfileId
+        });
+
+        await db.SaveChangesAsync();
+
+        return TypedResults.Created();
     }
 }
