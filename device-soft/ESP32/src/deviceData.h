@@ -185,6 +185,11 @@ public:
         return profPtr;
     }
 
+    int getProfilesSize()
+    {
+        return profilesSize;
+    }
+
     void addPillSlot(PillSlot ps, int sNum)
     {
         if (sNum > 2)

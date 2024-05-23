@@ -23,10 +23,9 @@ public:
 
     int getPriority() { return priority; }
 
-    bool checkLifetime(int dt)
+    bool checkLifetime()
     {
-        lifetime -= dt;
-        return lifetime > 0;
+        return lifetime-- > 0;
     }
 
     int getLifetime()
@@ -131,7 +130,7 @@ public:
     {
         if (current != -1)
         {
-            if (!mq.accessCurr(current)->checkLifetime(millis() - lastUpdate))
+            if (!mq.accessCurr(current)->checkLifetime())
             {
                 mq.deleteExpired(current);
                 current = -1;

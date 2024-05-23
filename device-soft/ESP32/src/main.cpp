@@ -3,9 +3,8 @@
 
 #include "BluetoothSerial.h"
 #include <WiFi.h>
-#include <WiFiUdp.h>
-#include <NTPClient.h>
-#include <PubSubClient.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h>
 
 #include <MFRC522.h>
 #include <SPI.h>
@@ -24,10 +23,11 @@
 #include "drivers/pickupSys.h"
 #include "drivers/rfidDriver.h"
 #include "./deviceData.h"
+#include "./cert.h"
 
 #define BAUD_RATE 9600
 
-#define DD_TRANSM_SIZE 1024
+#define DD_TRANSM_SIZE 2048
 
 #define SERVO_PIN 15
 
@@ -96,15 +96,11 @@ static DeviceData deviceData;
 void saveData(JsonObject);
 void checkSchedule(String);
 
-bool dataUpd;
-
 // BT
 
-#define BT_TIME_UPD_REQ 0
 #define BT_RFID_GET_REQ 1
 #define BT_DUID_GET_REQ 2
-#define BT_DATA_UPD_REQ 4
-#define BT_WIFI_SET_REQ 5
+#define BT_WIFI_SET_REQ 3
 
 static BluetoothSerial SerialBT;
 String receivedMsg;
@@ -114,9 +110,10 @@ void bluetoothReqHandler(String);
 // RTC
 
 ESP32Time rtc(0);
-bool timeUpd;
 
 // WiFi
+
+WiFiClientSecure wsClient;
 
 #define WIFI_CONNECT_TIMEOUT 10000
 
@@ -127,92 +124,27 @@ unsigned long lastConAtt;
 
 // NTP & TIME
 
-#define NTP_SERVER "pool.ntp.org"
-int utcOffset;
+#define TIME_SRC "http://worldtimeapi.org/api/ip/%s"
 
-void ntpTimeUpd();
+void httpTimeUpd();
 
 std::string getCurrTimeFmt();
 std::string getCurrDateFmt();
 
-// MQTT
+// HTTP
 
-#define MQTT_SERVER "91.121.93.94"
+HTTPClient client;
 
-char mqttClientId[100];
+#define PUB_IP_LOOKUP "http://api.ipify.org"
 
-char dataTopic[100];
-char telemetryTopic[100];
+char ipStr[16];
+void pubIP_lookup();
 
-WiFiClient wifiClient;
-PubSubClient mqttClient(wifiClient);
+#define DATA_SRC "https://dispenser-backend.onrender.com/api/devices/%s/config"
 
-void mqttCallback(char *topic, byte *payload, unsigned int payloadLen)
-{
-    Serial.print("Message arrived [");
-    Serial.print(topic);
-    Serial.println("]: ");
+void httpsDataUpd();
 
-    char serializedData[DD_TRANSM_SIZE];
-
-    for (int i = 0; i < payloadLen; i++)
-    {
-        serializedData[i] = (char)payload[i];
-    }
-
-    // for (int i = payloadLen - 1; i >= 0; i--)
-    // {
-    //     if (serializedData[i] == '"')
-    //     {
-    //         serializedData[i + 1] = '\0';
-    //         break;
-    //     }
-    // }
-
-    sprintf(outputBuffer, "%s\n", serializedData);
-    Serial.println(outputBuffer);
-
-    // if (strcmp(topic, dataTopic) == 0)
-    // {
-    // DynamicJsonDocument dataJSON(DD_TRANSM_SIZE);
-    // DeserializationError err = deserializeJson(dataJSON, serializedData);
-
-    // if (err)
-    // {
-    //     Serial.print(F("deserializeJson() failed with code "));
-    //     Serial.println(err.f_str());
-    //     Serial.println("\n");
-
-    //     return;
-    // }
-
-    // JsonObject dataObj = dataJSON["payload"];
-    // saveData(dataObj);
-
-    // dataUpd = true;
-    // deviceData.status();
-
-    // ld.accessQueue()->enqueue(LcdMsg("  Device data   ", "   uploaded!    ", 1, 2000));
-
-    // Serial.println("Device data successfully updated\n");
-    // }
-}
-
-void mqttReconnect()
-{
-    if (mqttClient.connect(mqttClientId))
-    {
-        Serial.println(" Reconnected sucessfully!");
-
-        mqttClient.subscribe(dataTopic);
-    }
-    else
-    {
-        Serial.print(" Reconnection failed: rc=");
-        Serial.print(mqttClient.state());
-        Serial.println(". Retry on the next tic...");
-    }
-}
+StaticJsonDocument<DD_TRANSM_SIZE> json;
 
 void setup()
 {
@@ -220,7 +152,6 @@ void setup()
 
     Serial.begin(BAUD_RATE);
     Wire.begin();
-    Wire.setPins(SDA_PIN, SCL_PIN);
 
     Serial.println("\n\nSetup logs:\n");
 
@@ -258,10 +189,6 @@ void setup()
     sprintf(outputBuffer, "III. Device's UUID generated: %s\n", deviceIdBase64.c_str());
     Serial.println(outputBuffer);
 
-    // BT
-
-    SerialBT.begin(BT_DEVICE);
-
     // Motor
 
     motor.attach(SERVO_PIN);
@@ -284,34 +211,25 @@ void setup()
 
     Serial.println("VI. RFID manager initialized successfully\n");
 
-    // MQTT
+    // BT
 
-    stpcpy(mqttClientId, "IntelliDose:");
-    strcat(mqttClientId, deviceIdBase64.c_str());
+    SerialBT.begin(BT_DEVICE);
 
-    strcpy(dataTopic, ("IntelliDose/" + deviceIdBase64 + "/dataTopic").c_str());
-    strcpy(telemetryTopic, ("IntelliDose/" + deviceIdBase64 + "/telemetryTopic").c_str());
+    Serial.println("VII. BT operational\n");
 
-    sprintf(outputBuffer, "Data topic name: %s", dataTopic);
-    Serial.println(outputBuffer);
-    sprintf(telemetryTopic, "Telemetry topic name: %s\n", telemetryTopic);
-    Serial.println(telemetryTopic);
+    // WIFI
 
-    mqttClient.setBufferSize(DD_TRANSM_SIZE);
-    mqttClient.setServer(MQTT_SERVER, 1883);
-    mqttClient.setCallback(mqttCallback);
+    wsClient.setCACert(cert_chain);
 
-    Serial.println("VI. MQTT set up successfully\n");
+    Serial.println("VIII. WiFi Secure certificate set up\n");
 
     // FINISH
 
-    timeUpd = false;
-    dataUpd = false;
     RFID_req = false;
 
     conTimer = 0;
 
-    ld.accessQueue()->enqueue(LcdMsg("     Setup      ", "   finsihed!    ", 1, 2000));
+    ld.accessQueue()->enqueue(LcdMsg("     Setup      ", "   finsihed!    ", 1, 1));
     ld.update();
 
     Serial.println("! Setup finished !\n");
@@ -319,8 +237,6 @@ void setup()
 
 void loop()
 {
-    Wire.begin();
-
     while (SerialBT.available())
     {
         char incomingChar = SerialBT.read();
@@ -344,6 +260,7 @@ void loop()
         {
             sprintf(outputBuffer, "attempting to connect to %s", ssid);
             Serial.println(outputBuffer);
+            ld.accessQueue()->enqueue(LcdMsg("  Connecting to ", ssid, 1, 1));
 
             WiFi.mode(WIFI_STA);
             WiFi.begin(ssid, pass);
@@ -356,37 +273,36 @@ void loop()
                 memset(ssid, '\0', sizeof(ssid));
                 memset(pass, '\0', sizeof(pass));
 
-                Serial.println("WiFi connection attempt timed out... turning on BT\n");
-
-                WiFi.disconnect(true);
-                WiFi.mode(WIFI_OFF);
-
                 SerialBT.begin(BT_DEVICE);
+
+                Serial.println("WiFi connection attempt timed out... turning on BT\n");
+                ld.accessQueue()->enqueue(LcdMsg("Connect. attempt", "    timed out   ", 1, 1));
             }
         }
         else
         {
             Serial.println("provide WiFi details via Bluetooth");
+            ld.accessQueue()->enqueue(LcdMsg("Set WiFi details", "   via the app  ", 1, 1));
         }
     }
     else
     {
-        if (!mqttClient.connected())
+        if (strlen(ipStr) == 0)
         {
-            Serial.print("MQTT connection lost! Attempting reconnection... ");
-            mqttReconnect();
-        }
-        else
-        {
-            mqttClient.loop();
+            pubIP_lookup();
         }
 
-        if (!timeUpd || !dataUpd)
+        bool timeCheck = rtc.getYear() > 1970;
+        bool dataCheck = deviceData.getProfilesSize() > 0;
+
+        if (!timeCheck || !dataCheck)
         {
-            if (!timeUpd)
+            if (!timeCheck)
             {
-                Serial.println("Time is not set up!");
-                ntpTimeUpd();
+                Serial.println("Time is not set up!\n");
+                ld.accessQueue()->enqueue(LcdMsg("   Setting up   ", "  the sys time  ", 1, 1));
+
+                httpTimeUpd();
 
                 std::string fmt1 = getCurrTimeFmt();
                 std::string fmt2 = getCurrDateFmt();
@@ -399,16 +315,13 @@ void loop()
 
                 Serial.println(line1);
                 Serial.println(line2);
-            }
-            else if (!dataUpd)
-            {
-                // if (ld.accessQueue()->getQueueSize() == 0)
-                // {
-                //     ld.accessQueue()->enqueue(LcdMsg("Set up sys time ", "via application ", 1, 1));
-                // }
 
-                // ld.accessQueue()->enqueue(LcdMsg("Upload sys data ", "via application ", 1, 1));
-                Serial.println("Device data is not updated!");
+                Serial.println();
+            }
+            else if (!dataCheck)
+            {
+                Serial.println("Device data is not updated!\n");
+                ld.accessQueue()->enqueue(LcdMsg("   Looking for   ", "  the schedules ", 1, 1));
             }
         }
         else
@@ -525,7 +438,7 @@ void loop()
     ld.update();
     pd.buzz();
 
-    delay(500);
+    delay(1000);
 }
 
 std::string getCurrTimeFmt()
@@ -592,8 +505,8 @@ void bluetoothReqHandler(String reqString)
     reqString.remove(0, 1);
     reqString.toCharArray(serializedData, DD_TRANSM_SIZE);
 
-    DynamicJsonDocument reqJSON(DD_TRANSM_SIZE);
-    DeserializationError err = deserializeJson(reqJSON, serializedData);
+    json.clear();
+    DeserializationError err = deserializeJson(json, serializedData);
 
     if (err)
     {
@@ -604,49 +517,11 @@ void bluetoothReqHandler(String reqString)
         return;
     }
 
-    int reqCode = reqJSON["reqCode"];
-    JsonObject payload = reqJSON["payload"];
+    int reqCode = json["reqCode"];
+    JsonObject payload = json["payload"];
 
     switch (reqCode)
     {
-    case BT_TIME_UPD_REQ:
-    {
-        int gmtOffset = payload["gmtOffset"];
-
-        JsonObject date = payload["date"];
-        int year = date["year"];
-        int month = date["month"];
-        int day = date["day"];
-
-        JsonObject time = payload["time"];
-        int hour = time["hour"];
-        int minute = time["minute"];
-        int second = time["second"];
-
-        rtc.setTime(second, minute, hour, day, month, year);
-        rtc.offset = gmtOffset;
-
-        timeUpd = true;
-
-        ld.accessQueue()->enqueue(LcdMsg("    Time upd    ", " successfully!  ", 1, 2000));
-
-        Serial.println("Time successfully updated!");
-    }
-    break;
-
-    case BT_DATA_UPD_REQ:
-    {
-        saveData(payload);
-
-        dataUpd = true;
-        deviceData.status();
-
-        ld.accessQueue()->enqueue(LcdMsg("  Device data   ", "   uploaded!    ", 1, 2000));
-
-        Serial.println("Device data successfully updated\n");
-    }
-    break;
-
     case BT_DUID_GET_REQ:
     {
         String response = "\"{\"resCode\":" + String(BT_DUID_GET_REQ) + ", \"payload\":{\"deviceIdBase64\":\"" + String(deviceIdBase64.c_str()) + "\"}}\"";
@@ -673,7 +548,6 @@ void bluetoothReqHandler(String reqString)
     {
         strcpy(ssid, payload["ssid"]);
         strcpy(pass, payload["pass"]);
-        utcOffset = payload["utcOffset"];
 
         Serial.println("WiFi details received... shutting down BT\n");
         SerialBT.end();
@@ -795,32 +669,116 @@ std::string uuid4Format(const std::string &uuid_str)
     return formatted_uuid;
 }
 
-void ntpTimeUpd()
+void httpTimeUpd()
 {
-    WiFiUDP ntpUDP;
-    NTPClient timeClient(ntpUDP, NTP_SERVER, 0);
+    if (WiFi.status() == WL_CONNECTED)
+    {
+        char url[100];
+        sprintf(url, TIME_SRC, ipStr);
 
-    timeClient.begin();
-    timeClient.update();
+        client.begin(url);
+        int httpCode = client.GET();
 
-    unsigned long epochTime = timeClient.getEpochTime();
-    struct tm *ptm = gmtime((time_t *)&epochTime);
+        if (httpCode >= 200 && httpCode < 300)
+        {
+            json.clear();
+            DeserializationError err = deserializeJson(json, client.getString());
 
-    int year = ptm->tm_year + 1900;
-    int month = ptm->tm_mon + 1;
-    int day = ptm->tm_mday;
-    int hour = ptm->tm_hour;
-    int minute = ptm->tm_min;
-    int second = ptm->tm_sec;
+            if (err)
+            {
+                sprintf(outputBuffer, "Time update: deserializeJson() failed - %s\n", err.c_str());
+                Serial.println(outputBuffer);
+                return;
+            }
 
-    rtc.setTime(second, minute, hour, day, month, year);
-    rtc.offset = utcOffset;
+            String datetime = json["datetime"];
 
-    timeClient.end();
+            struct DateTime
+            {
+                int year;
+                int month;
+                int day;
+                int hour;
+                int minute;
+                int second;
+                int ms;
+                int offsetHrs;
+            };
 
-    timeUpd = true;
-    Serial.println("Time successfully updated!");
+            DateTime dt;
+            int pc = sscanf(
+                datetime.c_str(),
+                "%d-%d-%dT%d:%d:%d.%d+%d:00",
+                &dt.year, &dt.month, &dt.day, &dt.hour, &dt.minute, &dt.second, &dt.ms, &dt.offsetHrs);
+
+            if (pc == 8)
+            {
+                rtc.setTime(dt.second, dt.minute, dt.hour, dt.day, dt.month, dt.year);
+                rtc.offset = 0;
+
+                Serial.println("Time update: Time successfully updated!\n");
+            }
+            else
+            {
+                Serial.println("Time update: Error parsing datetime string\n");
+            }
+
+            client.end();
+        }
+        else
+        {
+            Serial.println("Error on HTTP request");
+            ld.accessQueue()->enqueue(LcdMsg(" Failed to upd. ", " the schedules  ", 1, 3000));
+        }
+    }
+    else
+    {
+        Serial.println("No WiFi connection!");
+    }
 }
+
+void httpsDataUpd()
+{
+    if (WiFi.status() == WL_CONNECTED)
+    {
+        char url[100];
+        sprintf(url, DATA_SRC, deviceIdBase64.c_str());
+
+        client.begin(wsClient, url);
+        int httpCode = client.GET();
+
+        if (httpCode >= 200 && httpCode < 300)
+        {
+            json.clear();
+            DeserializationError err = deserializeJson(json, client.getString());
+
+            if (err)
+            {
+                sprintf(outputBuffer, "deserializeJson() failed: %s", err.c_str());
+                Serial.println(outputBuffer);
+                return;
+            }
+
+            saveData(json.as<JsonObject>());
+
+            deviceData.status();
+
+            Serial.println("Data update: Device data successfully updated\n");
+            ld.accessQueue()->enqueue(LcdMsg("  Device data   ", "    updated!    ", 1, 2000));
+
+            client.end();
+        }
+        else
+        {
+            Serial.println("Data update: Error on HTTP request!\n");
+            ld.accessQueue()->enqueue(LcdMsg(" Failed to upd. ", " the schedules  ", 1, 3000));
+        }
+    }
+    else
+    {
+        Serial.println("Data update: No WiFi connection!\n");
+    }
+};
 
 void saveData(JsonObject payload)
 {
@@ -863,5 +821,31 @@ void saveData(JsonObject payload)
 
             pProf->addItem(ScheduleItem(hour, minute, slotNumber, quantity));
         }
+    }
+}
+
+void pubIP_lookup()
+{
+    if (WiFi.status() == WL_CONNECTED)
+    {
+        client.begin(PUB_IP_LOOKUP);
+        int httpCode = client.GET();
+
+        if (httpCode > 0)
+        {
+            strcpy(ipStr, client.getString().c_str());
+
+            sprintf(outputBuffer, "Public IP address lookup: success - %s\n", ipStr);
+        }
+        else
+        {
+            Serial.println("Public IP address lookup: HTTP request failed!\n");
+        }
+
+        client.end();
+    }
+    else
+    {
+        Serial.println("Public IP address lookup: no WiFi connection!\n");
     }
 }
