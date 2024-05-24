@@ -53,6 +53,7 @@ public static class ProfileRoutes
             .AsNoTracking()
             .Where(p => p.CreatedById == callerData.Id)
             .Include(p => p.PillSchedules)
+            .ThenInclude(ps => ps.PillSlot)
             .Select(p => p.ToProfileWithSchedulesResponse())
             .ToArrayAsync();
 
