@@ -31,17 +31,21 @@ public static class ProfileRoutes
         return routes;
     }
 
-    private static async Task<Results<Ok<Profile>, NotFound>> GetProfile(
+    private static async Task<Results<Ok<ProfileWithSchedulesResponse>, NotFound>> GetProfile(
         int id,
         Db db)
     {
-        var profile = await db.Profiles.FindAsync(id);
+        var profile = await db.Profiles
+            .AsNoTracking()
+            .Include(p => p.PillSchedules)
+            .ThenInclude(ps => ps.PillSlot)
+            .FirstOrDefaultAsync(p => p.Id == id);
         if (profile is null)
         {
             return TypedResults.NotFound();
         }
 
-        return TypedResults.Ok(profile);
+        return TypedResults.Ok(profile.ToProfileWithSchedulesResponse());
     }
 
     private static async Task<Ok<ProfileWithSchedulesResponse[]>> GetOwnProfiles(
