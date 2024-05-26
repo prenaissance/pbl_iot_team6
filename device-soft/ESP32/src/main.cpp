@@ -101,6 +101,7 @@ void checkSchedule(String);
 #define BT_RFID_GET_REQ 1
 #define BT_DUID_GET_REQ 2
 #define BT_WIFI_SET_REQ 3
+#define BT_DATA_UPD_REQ 4
 
 static BluetoothSerial SerialBT;
 String receivedMsg;
@@ -113,23 +114,23 @@ ESP32Time rtc(0);
 
 // WiFi
 
+bool switchToWiFi();
+void switchToBT();
+
 WiFiClientSecure wsClient;
 
-#define WIFI_CONNECT_TIMEOUT 10000
+#define WIFI_CONNECT_TIMEOUT 4000
 
 char ssid[50];
 char pass[50];
 unsigned long conTimer;
 unsigned long lastConAtt;
 
-// NTP & TIME
+// TIME
 
 #define TIME_SRC "http://worldtimeapi.org/api/ip/%s"
 
-void httpTimeUpd();
-
-std::string getCurrTimeFmt();
-std::string getCurrDateFmt();
+bool httpTimeUpd();
 
 // HTTP
 
@@ -153,7 +154,7 @@ void setup()
     Serial.begin(BAUD_RATE);
     Wire.begin();
 
-    Serial.println("\n\nSetup logs:\n");
+    Serial.println("\n\nSetup logs:");
 
     // LCD
 
@@ -163,7 +164,7 @@ void setup()
     lcd.init();
     lcd.backlight();
 
-    Serial.println("I. LCD setup - success\n");
+    Serial.println("1. LCD setup - success");
 
     // GPIO
 
@@ -178,7 +179,7 @@ void setup()
     pinMode(IR_PIN, INPUT);
     pinMode(PIEZO_PIN, OUTPUT);
 
-    Serial.println("II. GPIO setup - success\n");
+    Serial.println("2. GPIO setup - success");
 
     // Device's UUID
 
@@ -186,14 +187,14 @@ void setup()
     deviceIdBase64 = uuid4Format(uint8_tToHexString(deviceIdBytes, 16));
     deviceIdBase64 = "11111111-1111-1111-1111-111111111111";
 
-    sprintf(outputBuffer, "III. Device's UUID generated: %s\n", deviceIdBase64.c_str());
+    sprintf(outputBuffer, "3. Device's UUID generated: %s", deviceIdBase64.c_str());
     Serial.println(outputBuffer);
 
     // Motor
 
     motor.attach(SERVO_PIN);
 
-    Serial.println("IV. Motor pinout set up successfully\n");
+    Serial.println("4. Motor pinout set up successfully");
 
     // LED-s
 
@@ -202,26 +203,26 @@ void setup()
     lm.init(LedDriver(LED2_R, LED2_G), 1);
     lm.update(0, 1);
 
-    Serial.println("V. LED indication system initialized successfully\n");
+    Serial.println("5. LED indication system initialized successfully");
 
     // RFID
 
     rfid.init(SS_PIN, RST_PIN);
     rm.init(&rfid);
 
-    Serial.println("VI. RFID manager initialized successfully\n");
+    Serial.println("6. RFID manager initialized successfully");
 
     // BT
 
     SerialBT.begin(BT_DEVICE);
 
-    Serial.println("VII. BT operational\n");
+    Serial.println("7. BT operational");
 
     // WIFI
 
     wsClient.setCACert(cert_chain);
 
-    Serial.println("VIII. WiFi Secure certificate set up\n");
+    Serial.println("8. WiFi Secure certificate set up");
 
     // FINISH
 
@@ -252,80 +253,42 @@ void loop()
         }
     }
 
-    if (WiFi.status() != WL_CONNECTED)
+    if (strlen(ssid) > 0 && strlen(pass) > 0)
     {
-        Serial.print("No WiFi connection: ");
-
-        if (strlen(ssid) > 0 && strlen(pass) > 0)
-        {
-            sprintf(outputBuffer, "attempting to connect to %s", ssid);
-            Serial.println(outputBuffer);
-            ld.accessQueue()->enqueue(LcdMsg("  Connecting to ", ssid, 1, 1));
-
-            WiFi.mode(WIFI_STA);
-            WiFi.begin(ssid, pass);
-
-            conTimer += (millis() - lastConAtt);
-            lastConAtt = millis();
-
-            if (conTimer > WIFI_CONNECT_TIMEOUT)
-            {
-                memset(ssid, '\0', sizeof(ssid));
-                memset(pass, '\0', sizeof(pass));
-
-                SerialBT.begin(BT_DEVICE);
-
-                Serial.println("WiFi connection attempt timed out... turning on BT\n");
-                ld.accessQueue()->enqueue(LcdMsg("Connect. attempt", "    timed out   ", 1, 1));
-            }
-        }
-        else
-        {
-            Serial.println("provide WiFi details via Bluetooth");
-            ld.accessQueue()->enqueue(LcdMsg("Set WiFi details", "   via the app  ", 1, 1));
-        }
-    }
-    else
-    {
-        if (strlen(ipStr) == 0)
-        {
-            pubIP_lookup();
-        }
-        else
-        {
-            httpsDataUpd();
-        }
-
         bool timeCheck = rtc.getYear() > 1970;
         bool dataCheck = deviceData.getProfilesSize() > 0;
+        bool ipCheck = strlen(ipStr) > 0;
 
-        if (!timeCheck || !dataCheck)
+        if (!timeCheck || !dataCheck || !ipCheck)
         {
-            if (!timeCheck)
+            if (!ipCheck)
             {
-                Serial.println("Time is not set up!\n");
-                ld.accessQueue()->enqueue(LcdMsg("   Setting up   ", "  the sys time  ", 1, 1));
+                Serial.println("Pub. ip is not known!");
+                pubIP_lookup();
+            }
+            else if (!timeCheck)
+            {
+                Serial.println("Time is not set up!");
 
-                httpTimeUpd();
+                if (httpTimeUpd())
+                {
+                    std::string fmt1 = getTimeFmt(rtc.getHour(true) < 10, rtc.getMinute() < 10);
+                    std::string fmt2 = getDateFmt(rtc.getDay() < 10, rtc.getMonth() + 1 < 10);
 
-                std::string fmt1 = getCurrTimeFmt();
-                std::string fmt2 = getCurrDateFmt();
+                    char line1[LCD_COLUMNS + 1];
+                    char line2[LCD_COLUMNS + 1];
 
-                char line1[LCD_COLUMNS + 1];
-                char line2[LCD_COLUMNS + 1];
+                    sprintf(line1, fmt1.c_str(), rtc.getHour(true), rtc.getMinute());
+                    sprintf(line2, fmt2.c_str(), rtc.getDay(), rtc.getMonth() + 1, rtc.getYear());
 
-                sprintf(line1, fmt1.c_str(), rtc.getHour(true), rtc.getMinute());
-                sprintf(line2, fmt2.c_str(), rtc.getDay(), rtc.getMonth() + 1, rtc.getYear());
-
-                Serial.println(line1);
-                Serial.println(line2);
-
-                Serial.println();
+                    Serial.println(line1);
+                    Serial.println(line2);
+                    Serial.print("\n");
+                }
             }
             else if (!dataCheck)
             {
-                Serial.println("Device data is not updated!\n");
-                ld.accessQueue()->enqueue(LcdMsg("   Looking for   ", "  the schedules ", 1, 1));
+                Serial.println("Device data is not updated!");
             }
         }
         else
@@ -378,6 +341,10 @@ void loop()
             }
         }
     }
+    else
+    {
+        Serial.println("Provide WiFi details!");
+    }
 
     if (id.getArmed())
     {
@@ -427,8 +394,8 @@ void loop()
 
     if (ld.accessQueue()->getQueueSize() == 0)
     {
-        std::string fmt1 = getCurrTimeFmt();
-        std::string fmt2 = getCurrDateFmt();
+        std::string fmt1 = getTimeFmt(rtc.getHour(true) < 10, rtc.getMinute() < 10);
+        std::string fmt2 = getDateFmt(rtc.getDay() < 10, rtc.getMonth() + 1 < 10);
 
         char line1[LCD_COLUMNS + 1];
         char line2[LCD_COLUMNS + 1];
@@ -445,65 +412,10 @@ void loop()
     delay(1000);
 }
 
-std::string getCurrTimeFmt()
-{
-    std::string fmt;
-
-    bool f1 = rtc.getHour(true) < 10;
-    bool f2 = rtc.getMinute() < 10;
-
-    if (f1 && f2)
-    {
-        fmt = "     0%d:0%d      ";
-    }
-    else if (f1)
-    {
-        fmt = "     0%d:%d      ";
-    }
-    else if (f2)
-    {
-        fmt = "     %d:0%d      ";
-    }
-    else
-    {
-        fmt = "     %d:%d      ";
-    }
-
-    return fmt;
-}
-
-std::string getCurrDateFmt()
-{
-    std::string fmt;
-
-    bool f1 = rtc.getDay() < 10;
-    bool f2 = rtc.getMonth() + 1 < 10;
-
-    if (f1 && f2)
-    {
-        fmt = "   0%d/0%d/%d   ";
-    }
-    else if (f1)
-    {
-        fmt = "   0%d/%d/%d   ";
-    }
-    else if (f2)
-    {
-        fmt = "   %d/0%d/%d   ";
-    }
-    else
-    {
-        fmt = "   %d/%d/%d   ";
-    }
-
-    return fmt;
-}
-
 void bluetoothReqHandler(String reqString)
 {
     char serializedData[DD_TRANSM_SIZE];
 
-    // reqString.replace(" ", "");
     reqString.replace("\n", "");
     reqString.trim();
     reqString.remove(0, 1);
@@ -553,11 +465,14 @@ void bluetoothReqHandler(String reqString)
         strcpy(ssid, payload["ssid"]);
         strcpy(pass, payload["pass"]);
 
-        Serial.println("WiFi details received... shutting down BT\n");
-        SerialBT.end();
+        Serial.println("\nWiFi details received\n");
+    }
+    break;
 
-        conTimer = 0;
-        lastConAtt = millis();
+    case BT_DATA_UPD_REQ:
+    {
+        Serial.println("\nData upd requested");
+        httpsDataUpd();
     }
     break;
 
@@ -581,7 +496,7 @@ void checkSchedule(String userRFID)
 
     if (pProf != nullptr)
     {
-        std::string fmt = getCurrTimeFmt();
+        std::string fmt = getTimeFmt(rtc.getHour(true) < 10, rtc.getMinute() < 10);
         sprintf(line1, fmt.c_str(), rtc.getHour(true), rtc.getMinute());
         sprintf(line2, "      %s      ", pProf->getUN());
 
@@ -648,141 +563,125 @@ void checkSchedule(String userRFID)
     }
 }
 
-std::string uint8_tToHexString(const uint8_t *data, size_t len)
+bool httpTimeUpd()
 {
-    std::stringstream ss;
-    ss << std::hex;
-
-    for (size_t i = 0; i < len; ++i)
+    if (!switchToWiFi())
     {
-        ss << std::setw(2) << std::setfill('0') << static_cast<int>(data[i]);
+        Serial.println("IP lookup failued due to WiFi connection failure!\n");
+        return false;
     }
 
-    return ss.str();
-}
+    Serial.println(" Connected successfully!");
 
-std::string uuid4Format(const std::string &uuid_str)
-{
-    std::string formatted_uuid =
-        uuid_str.substr(0, 8) + "-" +
-        uuid_str.substr(8, 4) + "-" +
-        uuid_str.substr(12, 4) + "-" +
-        uuid_str.substr(16, 4) + "-" +
-        uuid_str.substr(20);
+    char url[100];
+    sprintf(url, TIME_SRC, ipStr);
 
-    return formatted_uuid;
-}
+    client.begin(url);
+    int httpCode = client.GET();
 
-void httpTimeUpd()
-{
-    if (WiFi.status() == WL_CONNECTED)
+    if (httpCode >= 200 && httpCode < 300)
     {
-        char url[100];
-        sprintf(url, TIME_SRC, ipStr);
+        json.clear();
+        DeserializationError err = deserializeJson(json, client.getString());
 
-        client.begin(url);
-        int httpCode = client.GET();
-
-        if (httpCode >= 200 && httpCode < 300)
+        if (err)
         {
-            json.clear();
-            DeserializationError err = deserializeJson(json, client.getString());
+            sprintf(outputBuffer, "Time update: deserializeJson() failed - %s!", err.c_str());
+            Serial.println(outputBuffer);
+            return false;
+        }
 
-            if (err)
-            {
-                sprintf(outputBuffer, "Time update: deserializeJson() failed - %s\n", err.c_str());
-                Serial.println(outputBuffer);
-                return;
-            }
+        String datetime = json["datetime"];
 
-            String datetime = json["datetime"];
+        struct DateTime
+        {
+            int year;
+            int month;
+            int day;
+            int hour;
+            int minute;
+            int second;
+            int ms;
+            int offsetHrs;
+        };
 
-            struct DateTime
-            {
-                int year;
-                int month;
-                int day;
-                int hour;
-                int minute;
-                int second;
-                int ms;
-                int offsetHrs;
-            };
+        DateTime dt;
+        int pc = sscanf(
+            datetime.c_str(),
+            "%d-%d-%dT%d:%d:%d.%d+%d:00",
+            &dt.year, &dt.month, &dt.day, &dt.hour, &dt.minute, &dt.second, &dt.ms, &dt.offsetHrs);
 
-            DateTime dt;
-            int pc = sscanf(
-                datetime.c_str(),
-                "%d-%d-%dT%d:%d:%d.%d+%d:00",
-                &dt.year, &dt.month, &dt.day, &dt.hour, &dt.minute, &dt.second, &dt.ms, &dt.offsetHrs);
+        if (pc == 8)
+        {
+            rtc.setTime(dt.second, dt.minute, dt.hour, dt.day, dt.month, dt.year);
+            rtc.offset = 0;
 
-            if (pc == 8)
-            {
-                rtc.setTime(dt.second, dt.minute, dt.hour, dt.day, dt.month, dt.year);
-                rtc.offset = 0;
-
-                Serial.println("Time update: Time successfully updated!\n");
-            }
-            else
-            {
-                Serial.println("Time update: Error parsing datetime string\n");
-            }
-
-            client.end();
+            Serial.println("Time update: Time successfully updated");
         }
         else
         {
-            Serial.println("Error on HTTP request");
-            ld.accessQueue()->enqueue(LcdMsg(" Failed to upd. ", " the schedules  ", 1, 3000));
+            Serial.println("Time update: Error parsing datetime string!");
+            return false;
         }
     }
     else
     {
-        Serial.println("No WiFi connection!");
+        Serial.println("Time update: Error on HTTP request!");
+        return false;
     }
+
+    client.end();
+    switchToBT();
+
+    return true;
 }
 
 void httpsDataUpd()
 {
-    if (WiFi.status() == WL_CONNECTED)
+    if (!switchToWiFi())
     {
-        char url[100];
-        sprintf(url, DATA_SRC, deviceIdBase64.c_str());
+        Serial.println("IP lookup failued due to WiFi connection failure!\n");
+        return;
+    }
 
-        client.begin(wsClient, url);
-        int httpCode = client.GET();
+    Serial.println(" Connected successfully!");
 
-        if (httpCode >= 200 && httpCode < 300)
+    char url[100];
+    sprintf(url, DATA_SRC, deviceIdBase64.c_str());
+
+    client.begin(wsClient, url);
+    int httpCode = client.GET();
+
+    if (httpCode >= 200 && httpCode < 300)
+    {
+        json.clear();
+        DeserializationError err = deserializeJson(json, client.getString());
+
+        if (err)
         {
-            json.clear();
-            DeserializationError err = deserializeJson(json, client.getString());
-
-            if (err)
-            {
-                sprintf(outputBuffer, "deserializeJson() failed: %s", err.c_str());
-                Serial.println(outputBuffer);
-                return;
-            }
-
-            saveData(json.as<JsonObject>());
-
-            deviceData.status();
-
-            Serial.println("Data update: Device data successfully updated\n");
-            ld.accessQueue()->enqueue(LcdMsg("  Device data   ", "    updated!    ", 1, 2000));
-
-            client.end();
+            sprintf(outputBuffer, "deserializeJson() failed: %s", err.c_str());
+            Serial.println(outputBuffer);
+            return;
         }
-        else
-        {
-            Serial.println("Data update: Error on HTTP request!\n");
-            ld.accessQueue()->enqueue(LcdMsg(" Failed to upd. ", " the schedules  ", 1, 3000));
-        }
+
+        saveData(json.as<JsonObject>());
+
+        deviceData.status();
+
+        Serial.println("Data update: Device data successfully updated");
+        ld.accessQueue()->enqueue(LcdMsg("  Device data   ", "    updated!    ", 1, 2000));
+
+        client.end();
     }
     else
     {
-        Serial.println("Data update: No WiFi connection!\n");
+        Serial.println("Data update: Error on HTTP request!");
+        ld.accessQueue()->enqueue(LcdMsg(" Failed to upd. ", " the schedules  ", 1, 3000));
     }
-};
+
+    client.end();
+    switchToBT();
+}
 
 void saveData(JsonObject payload)
 {
@@ -796,8 +695,6 @@ void saveData(JsonObject payload)
         int slotNumber = pillSlot["slotNumber"];
         const char *pillName = pillSlot["pillName"];
         int pillCount = pillSlot["pillCount"];
-
-        Serial.println(String(slotNumber) + " " + String(pillName));
 
         deviceData.addPillSlot(PillSlot(pillName, pillCount), slotNumber);
         lm.update(pillCount, slotNumber - 1);
@@ -830,26 +727,80 @@ void saveData(JsonObject payload)
 
 void pubIP_lookup()
 {
-    if (WiFi.status() == WL_CONNECTED)
+    if (!switchToWiFi())
     {
-        client.begin(PUB_IP_LOOKUP);
-        int httpCode = client.GET();
+        Serial.println("IP lookup failued due to WiFi connection failure!\n");
+        return;
+    }
 
-        if (httpCode > 0)
-        {
-            strcpy(ipStr, client.getString().c_str());
+    Serial.println(" Connected successfully!");
 
-            sprintf(outputBuffer, "Public IP address lookup: success - %s\n", ipStr);
-        }
-        else
-        {
-            Serial.println("Public IP address lookup: HTTP request failed!\n");
-        }
+    client.begin(PUB_IP_LOOKUP);
+    int httpCode = client.GET();
 
-        client.end();
+    if (httpCode > 0)
+    {
+        strcpy(ipStr, client.getString().c_str());
+
+        sprintf(outputBuffer, "Public IP address lookup: success - %s", ipStr);
+        Serial.println(outputBuffer);
     }
     else
     {
-        Serial.println("Public IP address lookup: no WiFi connection!\n");
+        Serial.println("Public IP address lookup: HTTP request failed!\n");
     }
+
+    client.end();
+    switchToBT();
+}
+
+bool switchToWiFi()
+{
+    sprintf(outputBuffer, "Disabling BT... connecting to %s: ..", ssid);
+    Serial.print(outputBuffer);
+
+    SerialBT.end();
+
+    lastConAtt = millis();
+    conTimer = 0;
+
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(ssid, pass);
+
+    while (WiFi.status() != WL_CONNECTED)
+    {
+        delay(250);
+
+        Serial.print(".");
+
+        conTimer += millis() - lastConAtt;
+        lastConAtt = millis();
+
+        if (conTimer > WIFI_CONNECT_TIMEOUT)
+        {
+            memset(ssid, '\0', sizeof(ssid));
+            memset(pass, '\0', sizeof(pass));
+
+            Serial.println("Attempt timed out - WiFi details erased! Restarting BT");
+
+            WiFi.disconnect(true);
+            WiFi.mode(WIFI_OFF);
+
+            SerialBT.begin(BT_DEVICE);
+
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void switchToBT()
+{
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+
+    Serial.println("WiFi disabled, restarting BT\n");
+
+    SerialBT.begin(BT_DEVICE);
 }

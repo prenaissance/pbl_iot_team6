@@ -1,4 +1,4 @@
-#include <Arduino.h>
+#include "./fmt.h"
 
 class ScheduleItem
 {
@@ -216,24 +216,36 @@ public:
 
     void status()
     {
-        Serial.println("==========\nPill slots:");
+        char outputBuffer[256];
+
+        Serial.println("\n==========\nPill slots:");
 
         for (int i = 0; i < 2; i++)
         {
-            Serial.println("   " + String(i + 1) + ". " + String(pillSlots[i].getPillName()) + " (" + String(pillSlots[i].getPillCnt()) + ")");
+            sprintf(outputBuffer, "   %d. %s (%d)", i + 1, pillSlots[i].getPillName(), pillSlots[i].getPillCnt());
+            Serial.println(outputBuffer);
         }
 
         Serial.print("\nProfiles & Schedules:\n");
 
         for (int i = 0; i < profilesSize; i++)
         {
-            Serial.println("   " + String(i + 1) + ". " + String(profiles[i].getUN()) + " (" + String(profiles[i].getRUID()) + "): " + String(profiles[i].getSchedLen()));
+            sprintf(outputBuffer, "   %d. %s (%s): %d", i + 1, profiles[i].getUN(), profiles[i].getRUID(), profiles[i].getSchedLen());
+            Serial.println(outputBuffer);
 
             for (int j = 0; j < profiles[i].getSchedLen(); j++)
             {
                 ScheduleItem *pItem = profiles[i].getItem(j);
 
-                Serial.println("      * " + String(pItem->getTimeH()) + ':' + String(pItem->getTimeM()) + " | " + String(pItem->getSlotNum()) + " (" + String(pItem->getQuantity()) + ") - " + String(pItem->getFulfileld()));
+                std::string timeFmt = getTimeFmt(pItem->getTimeH() < 10, pItem->getTimeM() < 10);
+                char time[20];
+                sprintf(time, timeFmt.c_str(), pItem->getTimeH(), pItem->getTimeM());
+
+                String trimmedTime = String(time);
+                trimmedTime.replace(" ", "");
+
+                sprintf(outputBuffer, "      * %s | %d (%d) - %d", trimmedTime.c_str(), pItem->getSlotNum(), pItem->getQuantity(), pItem->getFulfileld());
+                Serial.println(outputBuffer);
             }
         }
 
