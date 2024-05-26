@@ -37,11 +37,14 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(name: reactNativeOrigins,
-                      policy =>
-                      {
-                          policy.WithOrigins("http://localhost:5037",
-                                              "https://localhost:5037");
-                      });
+        policy =>
+        {
+            policy.WithOrigins(
+                "http://localhost:5037",
+                "https://localhost:5037",
+                "http://dispenser-backend.onrender.com",
+                "https://dispenser-backend.onrender.com");
+        });
 });
 builder.Services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly(), ServiceLifetime.Scoped);
 builder.Services.AddDbContext<Db>(options =>
