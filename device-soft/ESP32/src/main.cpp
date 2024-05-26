@@ -291,6 +291,10 @@ void loop()
         {
             pubIP_lookup();
         }
+        else
+        {
+            httpsDataUpd();
+        }
 
         bool timeCheck = rtc.getYear() > 1970;
         bool dataCheck = deviceData.getProfilesSize() > 0;
