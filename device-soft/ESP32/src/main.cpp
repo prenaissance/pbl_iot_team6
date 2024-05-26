@@ -141,11 +141,22 @@ HTTPClient client;
 char ipStr[16];
 void pubIP_lookup();
 
-#define DATA_SRC "https://dispenser-backend.onrender.com/api/devices/%s/config"
+#define DEVICE_COMMON_ROUTE_PART "https://dispenser-backend.onrender.com/api/devices/%s"
+#define DATA_ENDPOINT_PART "/config"
+#define EVENT_ENDPOINT_PART "/event"
+
+#define CREATE_EVENT_PARAMS_FMT "?eventType=%s&eventData=%s"
+#define CREATE_EVENT_PARAMS_FMT_TRAILER "&profileId=%d"
+
+// #define EVENT_FMT "{\"eventType\":\"%s\",\"eventData\":\"%s\"}"
+// #define EVENT_ASSIGNMENT_TRAILER ",\"profileId\":%d}"
 
 void httpsDataUpd();
+void httpsCreateEventViaGET(String, String, unsigned int);
 
 StaticJsonDocument<DD_TRANSM_SIZE> json;
+
+bool startupLog;
 
 void setup()
 {
@@ -226,6 +237,7 @@ void setup()
 
     // FINISH
 
+    startupLog = false;
     RFID_req = false;
 
     conTimer = 0;
@@ -293,6 +305,14 @@ void loop()
         }
         else
         {
+            if (!startupLog)
+            {
+                sprintf(outputBuffer, "{\"msg\":\"IntelliDose~%s has begun operation\"}", deviceIdBase64.c_str());
+
+                httpsCreateEventViaGET("LOG", String(outputBuffer), 0);
+                startupLog = true;
+            }
+
             if (ds.checkSeq())
             {
                 ds.displaySequence();
@@ -567,7 +587,7 @@ bool httpTimeUpd()
 {
     if (!switchToWiFi())
     {
-        Serial.println("IP lookup failued due to WiFi connection failure!\n");
+        Serial.println("IP lookup failed due to WiFi connection failure!\n");
         return false;
     }
 
@@ -577,9 +597,9 @@ bool httpTimeUpd()
     sprintf(url, TIME_SRC, ipStr);
 
     client.begin(url);
-    int httpCode = client.GET();
+    int httpResCode = client.GET();
 
-    if (httpCode >= 200 && httpCode < 300)
+    if (httpResCode >= 200 && httpResCode < 300)
     {
         json.clear();
         DeserializationError err = deserializeJson(json, client.getString());
@@ -626,8 +646,8 @@ bool httpTimeUpd()
     }
     else
     {
-        Serial.println("Time update: Error on HTTP request!");
-        return false;
+        sprintf(outputBuffer, "Time update: Error on HTTP request - %s!", client.errorToString(httpResCode));
+        Serial.println(outputBuffer);
     }
 
     client.end();
@@ -640,19 +660,20 @@ void httpsDataUpd()
 {
     if (!switchToWiFi())
     {
-        Serial.println("IP lookup failued due to WiFi connection failure!\n");
+        Serial.println("Data update failed due to WiFi connection failure!\n");
         return;
     }
 
     Serial.println(" Connected successfully!");
 
     char url[100];
-    sprintf(url, DATA_SRC, deviceIdBase64.c_str());
+    sprintf(url, DEVICE_COMMON_ROUTE_PART, deviceIdBase64.c_str());
+    strcat(url, DATA_ENDPOINT_PART);
 
     client.begin(wsClient, url);
-    int httpCode = client.GET();
+    int httpResCode = client.GET();
 
-    if (httpCode >= 200 && httpCode < 300)
+    if (httpResCode >= 200 && httpResCode < 300)
     {
         json.clear();
         DeserializationError err = deserializeJson(json, client.getString());
@@ -669,14 +690,72 @@ void httpsDataUpd()
         deviceData.status();
 
         Serial.println("Data update: Device data successfully updated");
-        ld.accessQueue()->enqueue(LcdMsg("  Device data   ", "    updated!    ", 1, 2000));
 
         client.end();
     }
     else
     {
-        Serial.println("Data update: Error on HTTP request!");
-        ld.accessQueue()->enqueue(LcdMsg(" Failed to upd. ", " the schedules  ", 1, 3000));
+        sprintf(outputBuffer, "Data update: Error on HTTPS request - %s!", client.errorToString(httpResCode));
+        Serial.println(outputBuffer);
+    }
+
+    client.end();
+    switchToBT();
+}
+
+// CORS-CURSED REQUEST THAT IS UNABLE TO FOOL DB INTO CREATING A RECORD
+
+void httpsCreateEventViaGET(String eventType, String eventData, unsigned int profileId)
+{
+    if (!switchToWiFi())
+    {
+        Serial.println("Event posting via GET failed due to WiFi connection failure!\n");
+        return;
+    }
+
+    Serial.println(" Connected successfully!");
+
+    char url[500];
+    sprintf(url, DEVICE_COMMON_ROUTE_PART, deviceIdBase64.c_str());
+    strcat(url, EVENT_ENDPOINT_PART);
+
+    char params[400];
+
+    sprintf(params, CREATE_EVENT_PARAMS_FMT, eventType.c_str(), eventData.c_str());
+
+    String translatedParams = String(params);
+
+    translatedParams.replace("{", "%7B");
+    translatedParams.replace("}", "%7D");
+    translatedParams.replace("\"", "%22");
+    translatedParams.replace(":", "%3A");
+    translatedParams.replace(" ", "%20");
+
+    strcpy(params, translatedParams.c_str());
+
+    if (profileId > 0)
+    {
+        char trailer[20];
+        sprintf(trailer, CREATE_EVENT_PARAMS_FMT_TRAILER, profileId);
+
+        strcat(params, trailer);
+    }
+
+    strcat(url, params);
+
+    Serial.println(url);
+
+    client.begin(url);
+    int httpResCode = client.GET();
+
+    if (httpResCode >= 200 && httpResCode < 300)
+    {
+        Serial.println("Event posting via GET: Success");
+    }
+    else
+    {
+        sprintf(outputBuffer, "Event posting via GET: Error on HTTPS request - %d!", httpResCode);
+        Serial.println(outputBuffer);
     }
 
     client.end();
@@ -705,10 +784,11 @@ void saveData(JsonObject payload)
     JsonArray profiles = payload["profiles"];
     for (JsonObject profile : profiles)
     {
+        unsigned int profileId = profile["profileId"];
         const char *username = profile["username"];
         const char *RFID_UID = profile["rfid"];
 
-        deviceData.addProfile(Profile(username, RFID_UID));
+        deviceData.addProfile(Profile(profileId, username, RFID_UID));
 
         Profile *pProf = deviceData.getProfile(String(RFID_UID));
 
@@ -729,16 +809,16 @@ void pubIP_lookup()
 {
     if (!switchToWiFi())
     {
-        Serial.println("IP lookup failued due to WiFi connection failure!\n");
+        Serial.println("IP lookup failed due to WiFi connection failure!\n");
         return;
     }
 
     Serial.println(" Connected successfully!");
 
     client.begin(PUB_IP_LOOKUP);
-    int httpCode = client.GET();
+    int httpResCode = client.GET();
 
-    if (httpCode > 0)
+    if (httpResCode > 0)
     {
         strcpy(ipStr, client.getString().c_str());
 
@@ -747,7 +827,8 @@ void pubIP_lookup()
     }
     else
     {
-        Serial.println("Public IP address lookup: HTTP request failed!\n");
+        sprintf(outputBuffer, "Public IP lookup: Error on HTTP request - %s!", client.errorToString(httpResCode));
+        Serial.println(outputBuffer);
     }
 
     client.end();

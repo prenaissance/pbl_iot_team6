@@ -90,6 +90,7 @@ public:
 class Profile
 {
 private:
+    unsigned int profileId;
     char username[20];
     char RFID_UID[10];
 
@@ -98,10 +99,15 @@ private:
 
 public:
     Profile() {}
-    Profile(const char *un, const char *ruid) : scheduleSize(0)
+    Profile(unsigned int pid, const char *un, const char *ruid) : profileId(pid), scheduleSize(0)
     {
         strcpy(username, un);
         strcpy(RFID_UID, ruid);
+    }
+
+    unsigned int getProfileId()
+    {
+        return profileId;
     }
 
     char *getUN()
