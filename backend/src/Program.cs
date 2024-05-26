@@ -34,18 +34,18 @@ builder.Services.AddSwaggerGen(options =>
             Description = "JWT Authorization header using the Bearer scheme."
         });
 });
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy(name: reactNativeOrigins,
-        policy =>
-        {
-            policy.WithOrigins(
-                "http://localhost:5037",
-                "https://localhost:5037",
-                "http://dispenser-backend.onrender.com",
-                "https://dispenser-backend.onrender.com");
-        });
-});
+// builder.Services.AddCors(options =>
+// {
+//     options.AddPolicy(name: reactNativeOrigins,
+//         policy =>
+//         {
+//             policy.WithOrigins(
+//                 "http://localhost:5037",
+//                 "https://localhost:5037",
+//                 "http://dispenser-backend.onrender.com",
+//                 "https://dispenser-backend.onrender.com");
+//         });
+// });
 builder.Services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly(), ServiceLifetime.Scoped);
 builder.Services.AddDbContext<Db>(options =>
 {
@@ -88,7 +88,7 @@ Db db = scope.ServiceProvider.GetRequiredService<Db>();
 db.Database.Migrate(); // Apply any pending migrations, dev mode
 
 // Configure the HTTP request pipeline.
-app.UseCors(reactNativeOrigins);
+// app.UseCors(reactNativeOrigins);
 app.UseHttpLogging();
 app.UseSwagger();
 app.UseSwaggerUI();
