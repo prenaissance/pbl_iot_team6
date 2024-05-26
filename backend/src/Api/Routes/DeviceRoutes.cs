@@ -86,6 +86,7 @@ public static class DeviceRoutes
         {
             Profiles = owner.CreatedProfiles.Select(p => new ConfigProfile
             {
+                ProfileId = p.Id,
                 Username = p.Username,
                 Rfid = p.RfidTag?.Rfid,
                 PillSchedules = p.PillSchedules.SelectMany(
