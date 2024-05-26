@@ -73,6 +73,9 @@ builder.Services.AddHttpLogging(logging =>
         | HttpLoggingFields.RequestQuery
         | HttpLoggingFields.ResponseStatusCode
         | HttpLoggingFields.Duration;
+    logging.RequestBodyLogLimit = 4096;
+    logging.ResponseBodyLogLimit = 4096;
+    logging.CombineLogs = true;
 });
 
 var app = builder.Build();
