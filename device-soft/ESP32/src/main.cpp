@@ -148,10 +148,11 @@ void pubIP_lookup();
 #define CREATE_EVENT_PARAMS_FMT "?eventType=%s&eventData=%s"
 #define CREATE_EVENT_PARAMS_FMT_TRAILER "&profileId=%d"
 
-// #define EVENT_FMT "{\"eventType\":\"%s\",\"eventData\":\"%s\"}"
-// #define EVENT_ASSIGNMENT_TRAILER ",\"profileId\":%d}"
+#define EVENT_FMT "{\"eventType\":\"%s\",\"eventData\":\"%s\"}"
+#define EVENT_ASSIGNMENT_TRAILER "\"profileId\":%d}"
 
 void httpsDataUpd();
+void httpsCreateEventViaPOST(String, String, unsigned int);
 void httpsCreateEventViaGET(String, String, unsigned int);
 
 StaticJsonDocument<DD_TRANSM_SIZE> json;
@@ -307,9 +308,9 @@ void loop()
         {
             if (!startupLog)
             {
-                sprintf(outputBuffer, "{\"msg\":\"IntelliDose~%s has begun operation\"}", deviceIdBase64.c_str());
+                sprintf(outputBuffer, "{\\\"msg\\\":\\\"IntelliDose~%s has begun operation\\\"}", deviceIdBase64.c_str());
 
-                httpsCreateEventViaGET("LOG", String(outputBuffer), 0);
+                httpsCreateEventViaPOST("LOG", String(outputBuffer), 0);
                 startupLog = true;
             }
 
@@ -703,7 +704,53 @@ void httpsDataUpd()
     switchToBT();
 }
 
-// CORS-CURSED REQUEST THAT IS UNABLE TO FOOL DB INTO CREATING A RECORD
+void httpsCreateEventViaPOST(String eventType, String eventData, unsigned int profileId)
+{
+    if (!switchToWiFi())
+    {
+        Serial.println("Event posting failed due to WiFi connection failure!\n");
+        return;
+    }
+
+    Serial.println(" Connected successfully!");
+
+    char url[100];
+    sprintf(url, DEVICE_COMMON_ROUTE_PART, deviceIdBase64.c_str());
+    strcat(url, EVENT_ENDPOINT_PART);
+
+    char reqBody[400];
+    sprintf(reqBody, EVENT_FMT, eventType.c_str(), eventData.c_str());
+
+    if (profileId > 0)
+    {
+        char trailer[20];
+        sprintf(trailer, EVENT_ASSIGNMENT_TRAILER, profileId);
+
+        reqBody[strlen(reqBody) - 1] = ',';
+        strcat(reqBody, trailer);
+    }
+
+    Serial.print("POST event: ");
+    Serial.println(String(reqBody));
+
+    client.begin(wsClient, url);
+    client.addHeader("Content-Type", "application/json");
+
+    int httpResCode = client.POST(String(reqBody));
+
+    if (httpResCode >= 200 && httpResCode < 300)
+    {
+        Serial.println("Event posting: Success");
+    }
+    else
+    {
+        sprintf(outputBuffer, "Event posting: Error on HTTPS request - %d!", httpResCode);
+        Serial.println(outputBuffer);
+    }
+
+    client.end();
+    switchToBT();
+}
 
 void httpsCreateEventViaGET(String eventType, String eventData, unsigned int profileId)
 {
@@ -742,8 +789,6 @@ void httpsCreateEventViaGET(String eventType, String eventData, unsigned int pro
     }
 
     strcat(url, params);
-
-    Serial.println(url);
 
     client.begin(url);
     int httpResCode = client.GET();
