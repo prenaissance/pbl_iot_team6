@@ -155,6 +155,7 @@ public static class PillRoutes
         var callerData = callerService.GetCallerData();
         var pillSchedule = db.PillSchedules
             .Include(ps => ps.PillSlot)
+            .Include(ps => ps.Profile)
             .Where(ps => ps.PillSlot.OwnerId == callerData.Id)
             .FirstOrDefault(ps => ps.Id == request.Id);
 
