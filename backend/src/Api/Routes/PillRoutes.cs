@@ -104,7 +104,8 @@ public static class PillRoutes
             {
                 PillSlotId = pillSlot.Id,
                 ProfileId = ps.ProfileId,
-                Times = ps.Times.Select(t => t.ToTimeOnly()).ToList()
+                Times = ps.Times.Select(t => t.ToTimeOnly()).ToList(),
+                Quantity = ps.Quantity
             })
             .ToArray();
 
