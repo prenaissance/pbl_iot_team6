@@ -13,6 +13,7 @@
 
 #include <LiquidCrystal_I2C.h>
 #include <ESP32Servo.h>
+#include <Preferences.h>
 
 #include <iomanip>
 #include <sstream>
@@ -52,9 +53,15 @@
 
 #define BT_DEVICE "ESP32"
 
+#define DEVICE_PARAM_NAMESPACE "device-param"
+#define DEVICE_ID_SELECTOR "device-id"
+
 // Use this buffer for f-output
 
 char outputBuffer[256];
+
+// Handler used for managing variables in nvm
+Preferences preferences;
 
 // Device's id SRAM storage and conversion functions
 
@@ -194,13 +201,23 @@ void setup()
     Serial.println("2. GPIO setup - success");
 
     // Device's UUID
+    
+    preferences.begin(DEVICE_PARAM_NAMESPACE, false);
+    String savedDeviceIdBase64 = preferences.getString(DEVICE_ID_SELECTOR, "");
 
-    esp_fill_random(deviceIdBytes, sizeof(deviceIdBytes));
-    deviceIdBase64 = uuid4Format(uint8_tToHexString(deviceIdBytes, 16));
-    deviceIdBase64 = "11111111-1111-1111-1111-111111111111";
-
-    sprintf(outputBuffer, "3. Device's UUID generated: %s", deviceIdBase64.c_str());
+    if (savedDeviceIdBase64 != "")
+    {
+        deviceIdBase64 = savedDeviceIdBase64.c_str();
+    }
+    else
+    {
+        esp_fill_random(deviceIdBytes, sizeof(deviceIdBytes));
+        deviceIdBase64 = uuid4Format(uint8_tToHexString(deviceIdBytes, 16));
+        preferences.putString(DEVICE_ID_SELECTOR, deviceIdBase64.c_str());
+    }
+    sprintf(outputBuffer, "3. Device UUID generated: %s\n", deviceIdBase64.c_str());
     Serial.println(outputBuffer);
+    preferences.end();
 
     // Motor
 
