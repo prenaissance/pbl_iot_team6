@@ -47,9 +47,9 @@ public:
         fulfilled = false;
     }
 
-    bool checkTime(int hour, int minute)
+    bool checkTime(int hour, int minute, int del)
     {
-        return abs((time[0] * 60 + time[1]) - (hour * 60 + minute)) < 30;
+        return abs((time[0] * 60 + time[1]) - (hour * 60 + minute)) < del;
     };
 };
 

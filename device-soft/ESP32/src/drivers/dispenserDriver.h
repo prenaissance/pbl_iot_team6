@@ -63,6 +63,6 @@ public:
             Serial.print(", ");
         }
 
-        Serial.println("\n");
+        Serial.print("\n");
     }
 };

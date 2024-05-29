@@ -25,7 +25,8 @@ public:
 
     bool checkLifetime()
     {
-        return lifetime-- > 0;
+        lifetime--;
+        return lifetime > 0;
     }
 
     int getLifetime()
@@ -149,6 +150,8 @@ public:
         }
 
         lastUpdate = millis();
+
+        // Serial.println("LCD queue size = " + String(mq.getQueueSize()));
     }
 
     void display(const char *l1, const char *l2)
