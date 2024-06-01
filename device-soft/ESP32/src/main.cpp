@@ -32,11 +32,11 @@
 
 #define SERVO_PIN 15
 
-#define LED1_R 26
-#define LED1_G 27
+#define LED1_R 14
+#define LED1_G 12
 
-#define LED2_R 14
-#define LED2_G 12
+#define LED2_R 26
+#define LED2_G 27
 
 #define IR_PIN 13
 #define PIEZO_PIN 32
@@ -75,12 +75,6 @@ std::string uuid4Format(const std::string &);
 
 LiquidCrystal_I2C lcd(I2C_ADDR, LCD_COLUMNS, LCD_LINES);
 static LcdDriver ld(&lcd);
-
-#define UNRESOLVED_FAILURE -1
-#define PICKUP_ARMED_IDLE 0
-#define PICKUP_SUCCESS 1
-#define PICKUP_FAILURE 2
-#define MECHANISM_FAILURE 3
 
 PiezoBuzzerDriver pd(PIEZO_PIN);
 IR_SensDriver id(IR_PIN);
@@ -424,22 +418,24 @@ void loop()
         case PICKUP_FAILURE:
             pd.initBuzz();
 
-            Serial.println("Pickup failure!\n");
+            Serial.println("Meds are not picked up!");
             ld.accessQueue()->enqueue(LcdMsg("    Take your   ", "   medicine!    ", 1, 1));
 
-            httpsCreateEventViaPOST("LOG", "{\\\"msg\\\":\\\"The dispensed medicine was not picked up!\\\"}", 0);
-
             break;
 
-        case UNRESOLVED_FAILURE:
+        case STOP:
             pd.stopBuzz();
 
-            Serial.println("Unresolved failure!\n");
-            ld.accessQueue()->enqueue(LcdMsg("Unresolved fai- ", " lure reported! ", 1, 1));
-
-            httpsCreateEventViaPOST("LOG", "{\\\"msg\\\":\\\"During the dispensing procedure, an unresolved failure occurred in the device!\\\"}", 0);
+            Serial.println("STOP!\n");
 
             break;
+
+        case PICKUP_FAILURE_STOP:
+            pd.stopBuzz();
+
+            Serial.println("STOP! (Med-s were not picked up)\n");
+
+            httpsCreateEventViaPOST("LOG", "{\\\"msg\\\":\\\"The dispensed medicine was not picked up!\\\"}", 0);
 
         default:
             break;
@@ -574,12 +570,14 @@ void checkSchedule(String userRFID)
         {
             ScheduleItem *pItem = pProf->getItem(i);
 
-            if (pItem->checkTime(rtc.getHour(true), rtc.getMinute(), 120))
+            if (pItem->checkTime(rtc.getHour(true), rtc.getMinute(), 300))
             {
                 if (pItem->getFulfileld())
                 {
-                    sprintf(outputBuffer, "%d:%d schedule item for %s  was already fulfilled today!\n", pItem->getTimeH(), pItem->getTimeM(), pProf->getUN());
+                    sprintf(outputBuffer, "%d:%d schedule item for %s  was already fulfilled today!", pItem->getTimeH(), pItem->getTimeM(), pProf->getUN());
                     Serial.println(outputBuffer);
+
+                    ld.accessQueue()->enqueue(LcdMsg(line1, "    FULFILLED   ", 1, 1));
 
                     continue;
                 }
@@ -633,8 +631,7 @@ void checkSchedule(String userRFID)
 
     if (!found)
     {
-        Serial.println(" Unknown!");
-        Serial.println("No schedule items found!\n");
+        Serial.println("No profile / available schedule items found!\n");
     }
 }
 

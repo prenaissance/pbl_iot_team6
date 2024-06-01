@@ -1,5 +1,12 @@
 #define CSH_FREQ 277
 
+#define STOP -1
+#define PICKUP_ARMED_IDLE 0
+#define PICKUP_SUCCESS 1
+#define PICKUP_FAILURE 2
+#define MECHANISM_FAILURE 3
+#define PICKUP_FAILURE_STOP 4
+
 class PiezoBuzzerDriver
 {
 private:
@@ -92,31 +99,39 @@ public:
 
     int check()
     {
-        if (millis() - armTime > 10000)
+        if (millis() - armTime > 25000)
         {
             reset();
-            return -1;
+
+            if (detected && !picked)
+            {
+                return PICKUP_FAILURE_STOP;
+            }
+            else
+            {
+                return STOP;
+            }
         }
-        else if (millis() - armTime > 5000)
+        else if (millis() - armTime > 15000)
         {
             if (!detected)
             {
                 reset();
-                return 3;
+                return MECHANISM_FAILURE;
             }
             else if (detected && !picked)
             {
-                return 2;
+                return PICKUP_FAILURE;
             }
             else
             {
                 reset();
-                return 1;
+                return PICKUP_SUCCESS;
             }
         }
         else
         {
-            return 0;
+            return PICKUP_ARMED_IDLE;
         }
     }
 };
