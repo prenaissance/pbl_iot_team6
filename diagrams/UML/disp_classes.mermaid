@@ -1,0 +1,29 @@
+classDiagram
+
+Servo <-- DispencerDriver
+DispencerDriver <-- DispencerSequence
+
+class DispencerDriver {
+    -Servo* pMotor
+    -int initAngle
+    -int angle[2]
+
+    +void dispence(int)
+}
+
+class DispencerSequence{
+    -int sequence[32]
+    -int seqLen
+    -DispencerDriver* motorDriver
+
+    +int dispence()
+    +void pushToSeq(int)
+    +bool checkSeq()
+}
+
+class Servo{
+    +int servoPin
+
+    +void attach(int)
+    +void write(int)
+}
