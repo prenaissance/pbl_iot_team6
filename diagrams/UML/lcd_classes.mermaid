@@ -1,0 +1,48 @@
+classDiagram
+
+MsgQueue *-- LcdMsg
+LcdDriver *-- MsgQueue
+LiquidCrystal_I2C <-- LcdDriver
+
+class LcdMsg {
+    -char line1[16]
+    -char line2[16]
+    -int priority
+    -int lifetime
+
+    +const char* getL1()
+    +const char* getL2()
+    +int getPriority()
+    +bool checkLifetime()
+}
+
+class MsgQueue {
+    -LcdMsg queue[64]
+    -int queueSize
+
+    +void enqueue(LcdMsg)
+    +int pickNext()
+    +int updCurrent(int)
+    +void deleteExpired(int)
+    +LcdMsg* accessCurr(int) 
+}
+
+class LiquidCrystal_I2C {
+    +void init()
+    +void backlight()
+    +void print(const char*)
+    +void setCursor(int, int)
+    +void clear()
+}
+
+class LcdDriver {
+    -LiquidCrystal_I2C* lcd
+    -MsgQueue mq
+    -int current
+    -unsigned long LastUpdate
+
+    +void reset()
+    +void update()
+    +void display(const char*, const char*)
+    +MsgQueue* accessQueue()
+}
