@@ -1,7 +1,7 @@
 classDiagram
 
-Servo <-- DispencerDriver
-DispencerDriver <-- DispencerSequence
+Servo "1" o-- "1" DispencerDriver
+DispencerDriver "1" o-- "1" DispencerSequence
 
 class DispencerDriver {
     -Servo* pMotor
