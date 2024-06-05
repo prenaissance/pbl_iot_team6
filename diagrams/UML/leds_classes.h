@@ -1,6 +1,6 @@
 classDiagram
 
-LedManager "1" o-- "0..2" LedDriver
+LedManager "1" *-- "0..2" LedDriver
 
 class LedDriver {
     -int R
