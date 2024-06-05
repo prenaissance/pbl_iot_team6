@@ -4,7 +4,7 @@
 #define PICKUP_ARMED_IDLE 0
 #define PICKUP_SUCCESS 1
 #define PICKUP_FAILURE 2
-#define MECHANISM_FAILURE 3
+#define MECHANISM_FAILURE_STOP 3
 #define PICKUP_FAILURE_STOP 4
 
 class PiezoBuzzerDriver
@@ -109,7 +109,7 @@ public:
             }
             else
             {
-                return STOP;
+                return MECHANISM_FAILURE_STOP;
             }
         }
         else if (millis() - armTime > 15000)
@@ -117,7 +117,7 @@ public:
             if (!detected)
             {
                 reset();
-                return MECHANISM_FAILURE;
+                return MECHANISM_FAILURE_STOP;
             }
             else if (detected && !picked)
             {

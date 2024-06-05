@@ -407,7 +407,7 @@ void loop()
 
             break;
 
-        case MECHANISM_FAILURE:
+        case MECHANISM_FAILURE_STOP:
             Serial.println("Mechanism failure!\n");
             ld.accessQueue()->enqueue(LcdMsg(" Mechanism fai- ", " lure reported! ", 1, 1));
 
@@ -420,13 +420,6 @@ void loop()
 
             Serial.println("Meds are not picked up!");
             ld.accessQueue()->enqueue(LcdMsg("    Take your   ", "   medicine!    ", 1, 1));
-
-            break;
-
-        case STOP:
-            pd.stopBuzz();
-
-            Serial.println("STOP!\n");
 
             break;
 
@@ -570,7 +563,7 @@ void checkSchedule(String userRFID)
         {
             ScheduleItem *pItem = pProf->getItem(i);
 
-            if (pItem->checkTime(rtc.getHour(true), rtc.getMinute(), 300))
+            if (pItem->checkTime(rtc.getHour(true), rtc.getMinute(), 600))
             {
                 if (pItem->getFulfileld())
                 {
