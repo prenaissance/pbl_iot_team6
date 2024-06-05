@@ -1,0 +1,30 @@
+@startuml
+start
+
+if (Time passed since activation > 25s) then (True)
+   :Reset subsystem;
+
+   if (detected) then (True)
+      :PICKUP_FAILURE_STOP;
+   else (False)
+      :MECHANISM_FAILURE_STOP;
+   endif
+
+(False) else if (Time passed since activation > 15s) then (True)
+   if (detected) then (False)
+      :Reset subsystem;
+      :MECHANISM_FAILURE_STOP;
+   else (True)
+      if (picked) then (False)
+         :PICKUP_FAILURE;
+      else (True)
+         :Reset subsystem;
+         :PICKUP_SUCCESS;
+      endif
+   endif
+else (False)
+   :PICKUP_ARMED_IDLE;
+endif
+
+stop
+@enduml
