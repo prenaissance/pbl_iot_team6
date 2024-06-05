@@ -1,6 +1,6 @@
 classDiagram
 
-LedManager *-- LedDriver
+LedManager "1" o-- "0..2" LedDriver
 
 class LedDriver {
     -int R
@@ -18,5 +18,6 @@ class LedDriver {
 class LedManager {
     -LedDriver instances[2]
 
+    +void init(LedDriver, int)
     +void update(int, int)
 }
