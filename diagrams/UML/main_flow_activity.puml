@@ -1,0 +1,57 @@
+@startuml
+
+start
+
+partition "preprocessing" {
+   :Define all const-s, macro-s & settings;
+   :Initialize all drivers;
+}
+
+partition "setup" {
+   :Initialize interfaces;
+   :Configure GPIO;
+   :Generate/extract device UUID;
+   :Initalize peripherals;
+}
+
+partition "loop" {
+   while () 
+   :Read and process BT Serial transmissions;
+   
+   if (WiFi details are provided?) then (Yes)
+      if (Configuration data: public IP address,\ntime and schedules available?) then (Yes)
+         :Check dispense sequence;
+         :Process RFID reads;
+
+         if (RFID cache is not null?) then (True)
+            if (RFID reading was requested previously?) then (Yes)
+               :Respond with ID read via BT;
+            else (No)
+               :Check the schedules;
+            endif
+         endif 
+         
+      else (No)
+         if (pubID is not null) then (False)
+             :Lookup public IP;
+         (True) else if (RTC is set up?) then (No)
+             :Get current local time;
+         else (Yes)
+            :Ask for update BT update command;
+         endif
+      endif
+   else (No)
+      :Ask for WiFi details;
+   endif
+
+   :Process reception system events;
+   :Clear RFID reader cache;
+   :Update LCD;
+   :Update buzzer status;
+
+   endwhile (Crash/Shutdown)
+}
+
+stop
+
+@enduml
