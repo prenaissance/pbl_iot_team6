@@ -88,10 +88,13 @@ function LogIn({navigation}){
                     fontSize: 25
                 }}>Log In</Text>
             </TouchableOpacity> */}
-            <PillButton
-                text='Log In'
-                onPress={() => handleSubmit()}
-            />
+            <View style={{marginTop: 265}}>
+                <PillButton
+                    text='Log In'
+                    onPress={() => handleSubmit()}
+                />
+            </View>
+            
         </SafeAreaView>
     )
 }

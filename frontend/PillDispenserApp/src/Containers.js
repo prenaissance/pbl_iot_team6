@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Text, TouchableOpacity, View } from 'react-native';
 import Tab from '../shared/tab';
 import { getData } from '../shared/storage-utils';
+import { globalStyles } from '../shared/style-sheet';
 function Containers({navigation}){
     const [loading, setLoading] = useState(false)
     const [data, setData] = useState([])
@@ -55,7 +56,7 @@ function Containers({navigation}){
                 // alignItems: 'center'
             }}
         >
-            <Text>
+            <Text style={[globalStyles.title, globalStyles.header]}>
                 CONTAINERS
             </Text>
             {loading 

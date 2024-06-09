@@ -3,7 +3,7 @@ import { SafeAreaView, View, Text, Image, TextInput, TouchableOpacity, FlatList 
 import PillButton from '../shared/pill-button';
 import url from '../shared/variables.js';
 import {getData, storeData} from '../shared/storage-utils.js';
-
+import { globalStyles } from '../shared/style-sheet.js';
 function NewUser({navigation}){
    
     const [name, setName] = useState('');
@@ -38,7 +38,7 @@ function NewUser({navigation}){
                 flex: 1,
             }}
         >
-            <Text>
+            <Text style={[globalStyles.title, globalStyles.header]}>
                 New User
             </Text>
             <View
@@ -46,21 +46,27 @@ function NewUser({navigation}){
                     alignItems: 'center',
                 }}
             >
-                <Image source={require('../icons/user-icon.png')}/>
+                <Image source={require('../icons/user-icon.png')} style={{marginVertical:20}}/>
                 <TextInput
                     placeholder='name'
                     onChangeText={value => setName(value)}
                     style={{
-                        backgroundColor: '#e9e9e9',
-                        width: 400,
-                        height: 40,
-                        borderRadius: 50,
+                        backgroundColor: '#E9E9E9', 
+                        height: 50,
+                        width: 350,
+                        borderRadius: 10, 
+                        marginTop: 16, 
+                        fontSize: 18,
+                        marginVertical: 20
                     }}
                 />
-                <PillButton
-                    text='Create User'
-                    onPress={()=> handleSubmit()}
-                />
+                <View style={{marginTop:260}}>
+                    <PillButton
+                        text='Create User'
+                        onPress={()=> handleSubmit()}
+                    />
+                </View>
+               
             </View>
            
         </View>

@@ -10,7 +10,7 @@ function MyTabs(){
         <Tab.Navigator
             screenOptions={{headerShown: false}}
           >
-            <Tab.Screen name="UserStack" component={UserStack}/>
+            <Tab.Screen name="UserStack" component={UserStack} />
             <Tab.Screen name="ContainerStack" component={ContainerStack}/>
             <Tab.Screen name="Notifications" component={Notifications}/>
           </Tab.Navigator>

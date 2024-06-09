@@ -12,7 +12,7 @@ function PillButton(props){
             color: 'white',
             justifyContent: 'center',
             alignContent: 'center',
-            marginTop: 265
+            // marginTop: 265
         }}
         onPress={() => props.onPress?.()}
     >

@@ -33,8 +33,9 @@ function Tab(props){
                     backgroundColor:'#e9e9e9',
                     height:75,
                     width:375,
-                    alignContent: 'center',
                     flexDirection:'row',
+
+                    alignContent: 'center',
                     alignItems: 'center',
                     borderRadius: 5,
                 }}
@@ -48,15 +49,26 @@ function Tab(props){
                         marginLeft: 10,
                     }}
                 />
-                <View>
-                    <Text
-                        style={{
-                            color: '#474747',
-                            fontSize: 20,
-                            fontWeight: 'bold',
-                        }}
-                    >{props.title}</Text>
-                    <Text>{props.text}</Text>
+                <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <View>
+                        <Text
+                            style={{
+                                color: '#474747',
+                                fontSize: 20,
+                                fontWeight: 'bold',
+                            }}
+                        >{props.title}</Text>
+                        <Text>{props.text}</Text>
+                    </View>
+                    {props.onDelete? (
+                        
+                        <TouchableOpacity style={{marginRight: 20}} onPress={props.onDelete}>
+                            <Text style={{color:'red'}}>
+                                Delete
+                            </Text>
+                        </TouchableOpacity>
+                    ): null}
+                    
                 </View>
                 
             </View>

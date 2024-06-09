@@ -67,10 +67,13 @@ function SignUp({navigation}){
                 <Text style={{color:'#40BAFF'}}>Login</Text>
                 </TouchableOpacity>
 
-            <PillButton
-                text='Sign Up'
-                onPress={() => handleSubmit()}
-            />
+            <View style={{marginTop: 265}}>
+                <PillButton
+                    text='Sign Up'
+                    onPress={() => handleSubmit()}
+                />
+            </View>
+            
         </SafeAreaView>
     )
 }

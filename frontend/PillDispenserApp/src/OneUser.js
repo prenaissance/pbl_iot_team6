@@ -3,6 +3,7 @@ import { Text, View, TouchableOpacity, Image, FlatList, ActivityIndicator } from
 import Tab from '../shared/tab';
 import { getData } from '../shared/storage-utils';
 import { shouldUseActivityState } from 'react-native-screens';
+import { globalStyles } from '../shared/style-sheet';
 
 function OneUser({navigation, route}){
     const {schedules, name, profileId} = route.params;
@@ -47,6 +48,43 @@ function OneUser({navigation, route}){
             console.log('failed - ' + e);
         });
     }
+    const createSchedule = async(slotId) =>{
+        setIsLoading(true);
+        const token = await getData('token');
+        console.log('slotId: ' + slotId);
+        await fetch(url+'api/pills/slots/'+slotId+'/schedules', {
+            method: 'POST',
+            headers:{
+                Accept: 'application/json',
+                'Content-Type' : 'application/json',
+                'Authorization' : 'Bearer '+token,
+            },
+            body:JSON.stringify({
+                "pillSchedules": [
+                    {
+                      "times": [  
+                        {
+                            "hour" : 0,
+                            "minutes" : 0
+                        }
+                      ],
+                      "profileId": profileId,
+                      "quantity": 1
+                    }
+                  ]
+            })
+        })
+        .then(response => response.status == 200 ? response.json() : console.log(response) )
+        .then(_data => {
+            // setIsLoading(false);
+            fetchSlots();
+        })
+    
+        .catch(e => {
+            console.log('failed - ' + e);
+        });
+
+    }
     const renderSchedule = ({item}) => {
         const filteredSchedules = item.pillSchedules.filter(schedule => schedule.profile.id === profileId);
         console.log("FILTERED: " + filteredSchedules);
@@ -60,9 +98,21 @@ function OneUser({navigation, route}){
                     type='pill' 
                     title={item.pillName} 
                     // text={filteredSchedules[0]? filteredSchedules[0].times.length + " times" : '0 times'}
-                    text={filteredSchedules[0]? filteredSchedules[0].times.length + " times" : '0 times'}
+                    text={filteredSchedules[0]? filteredSchedules[0].times.length + " times" : 'Select to create schedule'}
 
-                    onPress={()=> navigation.navigate('OneSchedule', {profileId: item.profileId, scheduleId: filteredSchedules[0].id, slotId: item.id, times: timesToSend})}
+                    onPress={async()=> {
+                        if(filteredSchedules[0]){
+                            navigation.navigate('OneSchedule', {profileId: item.profileId, scheduleId: filteredSchedules[0].id, slotId: item.id, times: timesToSend})
+                        }
+                        else{
+                            await createSchedule(item.id);
+                            
+                            // navigation.navigate('OneSchedule', {profileId: item.profileId, scheduleId: foundProfile[0].id, slotId: item.id, times: timesToSend})
+
+                        }
+                    }
+                        
+                    }
                 />
             </View>
         )
@@ -74,7 +124,7 @@ function OneUser({navigation, route}){
                 alignItems: 'center',
             }}
         >
-            <Text>
+            <Text style={[globalStyles.title, globalStyles.headerCenter]}>
                 {/* {schedules["pillSchedules"].pillSlotId} */}
                 {name} 
             </Text>
