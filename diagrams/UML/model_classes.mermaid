@@ -1,0 +1,60 @@
+classDiagram
+
+DeviceData "1" *-- "2" PillSlot
+DeviceData "1" *-- "0..10" Profile
+Profile "1" *-- "0..20" ScheduleItem
+PillSlot "1" <-- "1" ScheduleItem
+
+class ScheduleItem {
+    -int time[2]
+    -int slotNum
+    -int quantity
+    -bool fulfilled
+
+    +int getTimeH()
+    +int getTimeM()
+    +int getSlotNum()
+    +int getQuantity()
+    +bool getFulfileld()
+    +void check()
+    +void uncheck()
+    +bool checkTime(int, int, int)
+}
+
+class PillSlot {
+    -char pillname[20]
+    -int pillCnt
+
+    +void decPillCnt()
+    +int getPillCnt()
+    +bool checkPillCnt()
+    +char* getPillName()
+}
+
+class Profile {
+    -unsigned int profileId
+    -char username[20]
+    -char RFID_UID[10]
+    -ScheduleItem schedule[20]
+    -int scheduleSize
+
+    +unsigned int getProfileId()
+    +char* getUN()
+    +char* getRUID()
+    +int getSchedLen()
+    +ScheduleItem* getItem(int)
+    +void addItem(ScheduleItem)
+}
+
+class DeviceData {
+    -Profile profiles[10]
+    -int profilesSize
+    -PillSlot pillSlots[2]
+
+    +void addProfile(Profile)
+    +Profile* getProfile(String)
+    +int getProfilesSize()
+    +void addPillSlot(PillSlot, int)
+    +PillSlot* getPillSlot(int)
+    +void status()
+}

@@ -104,7 +104,8 @@ public static class PillRoutes
             {
                 PillSlotId = pillSlot.Id,
                 ProfileId = ps.ProfileId,
-                Times = ps.Times.Select(t => t.ToTimeOnly()).ToList()
+                Times = ps.Times.Select(t => t.ToTimeOnly()).ToList(),
+                Quantity = ps.Quantity
             })
             .ToArray();
 
@@ -154,6 +155,7 @@ public static class PillRoutes
         var callerData = callerService.GetCallerData();
         var pillSchedule = db.PillSchedules
             .Include(ps => ps.PillSlot)
+            .Include(ps => ps.Profile)
             .Where(ps => ps.PillSlot.OwnerId == callerData.Id)
             .FirstOrDefault(ps => ps.Id == request.Id);
 
@@ -163,6 +165,7 @@ public static class PillRoutes
         }
 
         pillSchedule.Times = request.Times.Select(t => t.ToTimeOnly()).ToList();
+        pillSchedule.Quantity = request.Quantity;
 
         db.SaveChanges();
 

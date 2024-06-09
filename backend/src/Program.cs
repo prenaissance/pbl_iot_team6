@@ -34,15 +34,18 @@ builder.Services.AddSwaggerGen(options =>
             Description = "JWT Authorization header using the Bearer scheme."
         });
 });
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy(name: reactNativeOrigins,
-                      policy =>
-                      {
-                          policy.WithOrigins("http://localhost:5037",
-                                              "https://localhost:5037");
-                      });
-});
+// builder.Services.AddCors(options =>
+// {
+//     options.AddPolicy(name: reactNativeOrigins,
+//         policy =>
+//         {
+//             policy.WithOrigins(
+//                 "http://localhost:5037",
+//                 "https://localhost:5037",
+//                 "http://dispenser-backend.onrender.com",
+//                 "https://dispenser-backend.onrender.com");
+//         });
+// });
 builder.Services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly(), ServiceLifetime.Scoped);
 builder.Services.AddDbContext<Db>(options =>
 {
@@ -73,6 +76,9 @@ builder.Services.AddHttpLogging(logging =>
         | HttpLoggingFields.RequestQuery
         | HttpLoggingFields.ResponseStatusCode
         | HttpLoggingFields.Duration;
+    logging.RequestBodyLogLimit = 4096;
+    logging.ResponseBodyLogLimit = 4096;
+    logging.CombineLogs = true;
 });
 
 var app = builder.Build();
@@ -82,12 +88,11 @@ Db db = scope.ServiceProvider.GetRequiredService<Db>();
 db.Database.Migrate(); // Apply any pending migrations, dev mode
 
 // Configure the HTTP request pipeline.
-app.UseCors(reactNativeOrigins);
+// app.UseCors(reactNativeOrigins);
 app.UseHttpLogging();
 app.UseSwagger();
 app.UseSwaggerUI();
 
-// app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -97,6 +102,7 @@ routes
     .RegisterAuthenticationRoutes()
     .RegisterProfileRoutes()
     .RegisterPillRoutes()
-    .RegisterDeviceRoutes();
+    .RegisterDeviceRoutes()
+    .RegisterProcessedEventsRoutes();
 
 app.Run();

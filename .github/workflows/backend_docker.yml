@@ -36,7 +36,9 @@ jobs:
           context: backend
           file: backend/Dockerfile
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/dispenser-backend:latest
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/dispenser-backend:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/dispenser-backend:${{ github.sha }}
 
   migrate-db:
     needs: build

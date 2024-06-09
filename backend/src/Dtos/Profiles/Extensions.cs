@@ -27,7 +27,14 @@ public static class Extensions
                     Times = ps.Times
                         .Select(TimeOfDay.FromTimeOnly)
                         .ToArray(),
-                    Quantity = ps.Quantity
+                    Quantity = ps.Quantity,
+                    PillSlot = new ProfilePillSlotResponse
+                    {
+                        Id = ps.PillSlot.Id,
+                        SlotNumber = ps.PillSlot.SlotNumber,
+                        PillName = ps.PillSlot.PillName,
+                        PillCount = ps.PillSlot.PillCount
+                    }
                 })
                 .ToArray(),
             RfidTag = profile.RfidTag
