@@ -4,12 +4,22 @@ import { SafeAreaView, View, Text, Button, TextInput, TouchableOpacity, Image } 
 function Tab(props){
     const tabIcons ={
         user: require('../icons/user-icon.png'),
+        clock: require('../icons/clock-icon.png'),
+        pill: require('../icons/pill-icon.png'),
     }
     switch(props.type){
         case 'user':
             iconPath = tabIcons.user;
+            break;
+        case 'clock':
+            iconPath = tabIcons.clock;
+            break;
+        case 'pill':
+            iconPath = tabIcons.pill;
+            break;
         default:
-            iconPath = tabIcons.user;
+            iconPath = tabIcons.pill;
+            break;
     }
     return(
         <TouchableOpacity
@@ -33,11 +43,19 @@ function Tab(props){
                     source={iconPath}
                     style={{
                         width:50,
-                        height:50
+                        height:50,
+                        marginRight: 10,
+                        marginLeft: 10,
                     }}
                 />
                 <View>
-                    <Text>{props.title}</Text>
+                    <Text
+                        style={{
+                            color: '#474747',
+                            fontSize: 20,
+                            fontWeight: 'bold',
+                        }}
+                    >{props.title}</Text>
                     <Text>{props.text}</Text>
                 </View>
                 

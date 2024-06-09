@@ -53,6 +53,7 @@ function Users({navigation}){
                 flexDirection: 'column',
             }}
         >
+            
             <View style={{
                 // flex:1,
                 // flexDirection: 'row',
@@ -82,7 +83,6 @@ function Users({navigation}){
                 alignContent: 'center',
                 alignItems: 'center'
             }}>
-            <SearchBar/>
 
             {loading 
                 ?   <ActivityIndicator

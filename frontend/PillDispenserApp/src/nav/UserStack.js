@@ -3,7 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import NewUser from '../NewUser';
 import Users from '../Users';
 import OneUser from '../OneUser';
-import NewSchedule from '../NewSchedule';
+import OneSchedule from '../OneSchedule';
 
 const Stack = createNativeStackNavigator();
 
@@ -16,7 +16,7 @@ function UserStack(){
             <Stack.Screen name="Users" component={Users} />
             <Stack.Screen name="NewUser" component={NewUser} />
             <Stack.Screen name="OneUser" component={OneUser}/>
-            <Stack.Screen name="NewSchedule" component={NewSchedule}/>
+            <Stack.Screen name="OneSchedule" component={OneSchedule}/>
         </Stack.Navigator>
     )
 }
