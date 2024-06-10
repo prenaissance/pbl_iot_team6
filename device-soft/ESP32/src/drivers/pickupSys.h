@@ -101,14 +101,14 @@ public:
     {
         if (millis() - armTime > 25000)
         {
-            reset();
-
             if (detected && !picked)
             {
+                reset();
                 return PICKUP_FAILURE_STOP;
             }
             else
             {
+                reset();
                 return MECHANISM_FAILURE_STOP;
             }
         }
@@ -131,7 +131,15 @@ public:
         }
         else
         {
-            return PICKUP_ARMED_IDLE;
+            if (detected && picked)
+            {
+                reset();
+                return PICKUP_SUCCESS;
+            }
+            else
+            {
+                return PICKUP_ARMED_IDLE;
+            }
         }
     }
 };

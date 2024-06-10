@@ -48,8 +48,12 @@ public:
     {
         if (queueSize < QUEUE_MAX_SIZE)
         {
-            queue[queueSize] = msg;
-            queueSize++;
+            LcdMsg prevMsg = queue[queueSize - 1];
+            if (strcmp(prevMsg.getL1(), msg.getL1()) != 0 && strcmp(prevMsg.getL2(), msg.getL2()) != 0)
+            {
+                queue[queueSize] = msg;
+                queueSize++;
+            }
         }
         else
         {

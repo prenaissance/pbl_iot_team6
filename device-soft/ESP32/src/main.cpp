@@ -218,7 +218,7 @@ void setup()
 
     preferences.end();
 
-    deviceIdBase64 = "11111111-1111-1111-1111-111111111111";
+    // deviceIdBase64 = "11111111-1111-1111-1111-111111111111";
 
     // Motor
 
@@ -284,6 +284,30 @@ void loop()
         }
     }
 
+    if (RFID_req)
+    {
+        if (rm.isNewCardRead())
+        {
+            rm.readUid();
+
+            sprintf(outputBuffer, "Requested UUID: %s", rm.getCachedUid());
+            Serial.println(outputBuffer);
+
+            String RFID_data = rm.getCachedUid();
+
+            String response = "\"{\"resCode\":" + String(BT_RFID_GET_REQ) + ", \"payload\":{\"rfid\":\"" + RFID_data + "\"}}\"";
+            SerialBT.println(response);
+
+            char line[LCD_COLUMNS + 1];
+            sprintf(line, "    %s    ", RFID_data);
+            ld.accessQueue()->enqueue(LcdMsg("   Tag read:    ", line, 1, 1));
+
+            Serial.println("Responded with RFID ID read");
+
+            RFID_req = false;
+        }
+    }
+
     if (strlen(ssid) > 0 && strlen(pass) > 0)
     {
         bool timeCheck = rtc.getYear() > 1970;
@@ -323,7 +347,7 @@ void loop()
             }
             else if (!dataCheck)
             {
-                ld.accessQueue()->enqueue(LcdMsg("   Config-data   ", "    NOT FOUND   ", 1, 1));
+                ld.accessQueue()->enqueue(LcdMsg("UPD config-data ", "via application ", 1, 1));
                 Serial.println("Device data is not updated!");
             }
         }
@@ -336,36 +360,13 @@ void loop()
                 httpsCreateEventViaPOST("LOG", String(outputBuffer), 0);
                 startupLog = true;
 
-                ld.accessQueue()->enqueue(LcdMsg(" Device - fully ", "   operational!  ", 1, 1));
+                ld.accessQueue()->enqueue(LcdMsg(" Device - fully ", "  operational!   ", 1, 1));
             }
 
             if (ds.checkSeq())
             {
                 // ds.displaySequence();
                 ds.dispence();
-            }
-            else if (RFID_req)
-            {
-                if (rm.isNewCardRead())
-                {
-                    rm.readUid();
-
-                    sprintf(outputBuffer, "Requested UUID: %s\n", rm.getCachedUid());
-                    Serial.println(outputBuffer);
-
-                    String RFID_data = rm.getCachedUid();
-
-                    String response = "\"{\"resCode\":" + String(BT_RFID_GET_REQ) + ", \"payload\":{\"rfid\":\"" + RFID_data + "\"}}\"";
-                    SerialBT.println(response);
-
-                    char line[LCD_COLUMNS + 1];
-                    sprintf(line, "    %s    ", RFID_data);
-                    ld.accessQueue()->enqueue(LcdMsg("   Tag read:    ", line, 1, 1));
-
-                    Serial.println("Responded with RFID ID read\n");
-
-                    RFID_req = false;
-                }
             }
             else if (!RFID_req)
             {
@@ -419,7 +420,7 @@ void loop()
             pd.initBuzz();
 
             Serial.println("Meds are not picked up!");
-            ld.accessQueue()->enqueue(LcdMsg("    Take your   ", "   medicine!    ", 1, 1));
+            ld.accessQueue()->enqueue(LcdMsg("    Take your   ", "    medicine!   ", 1, 1));
 
             break;
 
@@ -504,7 +505,7 @@ void bluetoothReqHandler(String reqString)
         ld.accessQueue()->enqueue(LcdMsg("  RFID reading  ", "   requested    ", 1, 1));
         ld.accessQueue()->enqueue(LcdMsg("    Approach    ", "    your tag    ", 1, 1));
 
-        Serial.println("RFID reading requset detected\n");
+        Serial.println("RFID reading requset detected");
     }
     break;
 
@@ -563,14 +564,14 @@ void checkSchedule(String userRFID)
         {
             ScheduleItem *pItem = pProf->getItem(i);
 
-            if (pItem->checkTime(rtc.getHour(true), rtc.getMinute(), 600))
+            if (pItem->checkTime(rtc.getHour(true), rtc.getMinute(), 180))
             {
                 if (pItem->getFulfileld())
                 {
                     sprintf(outputBuffer, "%d:%d schedule item for %s  was already fulfilled today!", pItem->getTimeH(), pItem->getTimeM(), pProf->getUN());
                     Serial.println(outputBuffer);
 
-                    ld.accessQueue()->enqueue(LcdMsg(line1, "    FULFILLED   ", 1, 1));
+                    ld.accessQueue()->enqueue(LcdMsg(line1, "   FULFILLED    ", 1, 1));
 
                     continue;
                 }
@@ -587,6 +588,9 @@ void checkSchedule(String userRFID)
                     }
                     else
                     {
+                        ld.accessQueue()->enqueue(LcdMsg("    Logging      ", " the operation  ", 1, 1));
+                        ld.update();
+
                         for (int j = 0; j < pItem->getQuantity(); j++)
                         {
                             if (!pSlot->checkPillCnt())
@@ -716,6 +720,9 @@ void httpsDataUpd()
     }
 
     Serial.println(" Connected successfully!");
+
+    ld.accessQueue()->enqueue(LcdMsg("   Updating...  ", "", 1, 1));
+    ld.update();
 
     char url[100];
     sprintf(url, DEVICE_COMMON_ROUTE_PART, deviceIdBase64.c_str());
