@@ -17,6 +17,9 @@ public static class ProfileRoutes
     {
         var group = routes.MapGroup("/profiles");
 
+        group.MapDelete("/self", DeleteSelf)
+            .WithAuthorization()
+            .WithDescription("Delete the account of the calling owner");
         group.MapGet("", GetOwnProfiles).WithAuthorization();
         group.MapGet("/{id}", GetProfile)
             .WithAuthorization()
@@ -130,6 +133,20 @@ public static class ProfileRoutes
         };
 
         await db.SaveChangesAsync();
+
+        return TypedResults.NoContent();
+    }
+
+    private static async Task<Results<NoContent, UnprocessableEntity<string>>> DeleteSelf(
+        Db db,
+        ICallerService callerService)
+    {
+        var callerData = callerService.GetCallerData();
+        var profile = await db.Owners.FindAsync(callerData.Id);
+        if (profile is null)
+        {
+            return TypedResults.UnprocessableEntity("Account already deleted");
+        }
 
         return TypedResults.NoContent();
     }
