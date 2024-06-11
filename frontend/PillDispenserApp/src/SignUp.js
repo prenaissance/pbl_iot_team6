@@ -1,15 +1,53 @@
 import React, {useState}  from 'react';
-import { SafeAreaView, View, Text, Button, TextInput, TouchableOpacity } from 'react-native';
+import { SafeAreaView, View, Text, Button, TextInput, TouchableOpacity, Alert } from 'react-native';
 import url from '../shared/variables';
 import PillButton from '../shared/pill-button';
 import {getData, storeData} from '../shared/storage-utils.js'
+import RNBluetoothClassic, { BluetoothDevice } from 'react-native-bluetooth-classic';
+
 function SignUp({navigation}){
+    const [idRecieved, setIdRecieved] = useState(false);
+    const [deviceId, setDeviceId] = useState("");
+    const handlePair = async() => {
+        const paired = await RNBluetoothClassic.getBondedDevices();
+        // this.setState({paired});
+
+        console.log(paired);
+        
+        // Alert.alert('PAIRED', JSON.stringify(paired));
+        // Alert.alert(JSON.stringify(paired[0].name), JSON.stringify(paired[0].address));
+
+        for (let i = 0; i < paired.length; i ++){
+        // Alert.alert(String(device.name), String(device.address))
+          if (String(paired[i].name) == "ESP32"){
+            // Alert.alert('FOUND ESP32', String(paired[i].address));
+            const connected = await paired[i].connect()
+            // Alert.alert(String(connected), String(paired[i].address));
+            const sentData = await paired[i].write("\"{\"reqCode\":2,\"payload\":{}}\"\n").then(
+                async() => {
+                    let id;
+                    do 
+                        id = await paired[i].read();
+                    while (id === null)
+                    let trimmedId = id.trim();
+                    let slicedId = trimmedId.slice(1, -1);
+                    // Alert.alert(String(id), 'wake up, im in your walls')
+                    let realId = JSON.parse(slicedId).payload.deviceIdBase64;
+                    setDeviceId(String(realId));
+                    setIdRecieved(true);
+                }
+            );
+            Alert.alert(String(sentData), String(paired[i].address));
+            setIsLoading(false);
+            }
+        }
+    }
     const handleSubmit = async() => {
         console.log(await getData('token'));
         const dataToSend = {
             username: username,
             password: password,
-            deviceId: "22ad34c6-2ff2-4dcf-a826-1994da215c8b"
+            deviceId: deviceId
         }
         console.log("awaiting...");
         await fetch(url+'api/authentication/register', {
@@ -22,7 +60,8 @@ function SignUp({navigation}){
         }).then(response => response.json()).then(
             data => {
                 storeData('token', data['token']);
-                console.log('success!')
+                console.log('success!');
+                Alert.alert('Success!', 'User created successfully');
             }
         ).catch(error => {
             console.error(error);
@@ -60,6 +99,9 @@ function SignUp({navigation}){
                     fontSize: 24,
                 }}
             />
+            <TouchableOpacity  onPress={() => !idRecieved? handlePair(): {}}>
+                <Text style={{color:'green'}}>{!idRecieved? ('Connect to device') : String(deviceId)}</Text>
+            </TouchableOpacity>
             <Text style={{
                 marginTop:15
             }}>Already have an account?</Text>
@@ -67,10 +109,11 @@ function SignUp({navigation}){
                 <Text style={{color:'#40BAFF'}}>Login</Text>
                 </TouchableOpacity>
 
-            <View style={{marginTop: 265}}>
+            <View style={[{marginTop: 265}, !idRecieved? {opacity: .2} : {opacity: 1}]}>
                 <PillButton
                     text='Sign Up'
-                    onPress={() => handleSubmit()}
+                    onPress={idRecieved? () => handleSubmit(): null}
+                    
                 />
             </View>
             

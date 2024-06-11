@@ -24,7 +24,7 @@ function LogIn({navigation}){
             data => {
                 storeData('token', data['token']);
                 setIsLoggedIn(true);
-                console.log('success!')
+                console.log('success!' + data['token']);
             }
         ).catch(error => {
             console.error(error);

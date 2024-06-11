@@ -59,6 +59,9 @@ function Containers({navigation}){
             <Text style={[globalStyles.title, globalStyles.header]}>
                 CONTAINERS
             </Text>
+           <TouchableOpacity onPress={() => navigation.navigate('DeviceConfig')}>
+            <Text>Configure Device</Text>
+           </TouchableOpacity>
             {loading 
                 ?(
                     <ActivityIndicator size={'large'}/>
