@@ -1,19 +1,19 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
-#include <BLE2902.h>
-#include <BLEDevice.h>
-#include <BLEServer.h>
-#include <BLEUtils.h>
-#include <ESP32Servo.h>
-#include <HTTPClient.h>
-#include <LiquidCrystal_I2C.h>
-#include <Wire.h>
-#include <MFRC522.h>
-#include <NTPClient.h>
-#include <SPI.h>
-#include <SPIFFS.h>
+
+#include "BluetoothSerial.h"
 #include <WiFi.h>
-#include <WiFiUdp.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h>
+
+#include <MFRC522.h>
+#include <SPI.h>
+
+#include <ESP32Time.h>
+
+#include <LiquidCrystal_I2C.h>
+#include <ESP32Servo.h>
+#include <Preferences.h>
 
 #include <iomanip>
 #include <sstream>
@@ -23,16 +23,20 @@
 #include "drivers/ledDriver.h"
 #include "drivers/pickupSys.h"
 #include "drivers/rfidDriver.h"
+#include "./deviceData.h"
+#include "./cert.h"
 
 #define BAUD_RATE 9600
 
+#define DD_TRANSM_SIZE 2048
+
 #define SERVO_PIN 15
 
-#define LED1_R 26
-#define LED1_G 27
+#define LED1_R 14
+#define LED1_G 12
 
-#define LED2_R 14
-#define LED2_G 12
+#define LED2_R 26
+#define LED2_G 27
 
 #define IR_PIN 13
 #define PIEZO_PIN 32
@@ -41,20 +45,33 @@
 #define LCD_COLUMNS 16
 #define LCD_LINES 2
 
+#define SDA_PIN 21
+#define SCL_PIN 22
+
 #define SS_PIN 17
 #define RST_PIN 4
 
-#define BLE_DEVICE_NAME "ESP32"
+#define BT_DEVICE "ESP32"
 
-#define WIFI_SSID "Redmi Note 9 Pro"
-#define WIFI_PASS "12345768"
+#define DEVICE_PARAM_NAMESPACE "device-param"
+#define DEVICE_ID_SELECTOR "device-id"
 
-#define SCHED_SERV_HOST "dispenser-backend.onrender.com"
+// Use this buffer for f-output
 
 char outputBuffer[256];
 
-uint8_t deviceIdBytes[16];
+// Handler used for managing variables in nvm
+Preferences preferences;
+
+// Device's id SRAM storage and conversion functions
+
+uint8_t deviceIdBytes[LCD_COLUMNS];
 std::string deviceIdBase64 = "";
+
+std::string uint8_tToHexString(const uint8_t *, size_t);
+std::string uuid4Format(const std::string &);
+
+// Peripherals' drivers & managers
 
 LiquidCrystal_I2C lcd(I2C_ADDR, LCD_COLUMNS, LCD_LINES);
 static LcdDriver ld(&lcd);
@@ -71,99 +88,98 @@ static LedManager lm;
 Rfid rfid;
 static RfidDriver rm;
 
-// Use www.uuidgenerator.net to get new UUIDs
+bool RFID_req;
 
-#define SERVICE_UUID "975b7600-ced6-4b3a-a4af-be038d43b8c9"
+// Device state SRAM storage and manip. functions
 
-#define UPDATE_SIGNAL_CHAR_UUID "f62206df-79d6-4eb9-bfc8-72036bf1e3b3"
-#define UPDATE_SIGNAL_CHAR_DESC "Client sets this bool 'flag' to call local schedule updating"
+static DeviceData deviceData;
 
-#define RFID_REQUEST_CHAR_UUID "30e27b63-3ee2-486a-a14f-e020be483ada"
-#define RFID_REQUEST_CHAR_DESC "Client uses this characteristic to request and recieve the RFID tag data"
-
-#define DEVICE_ID_CHAR_UUID "5a9bec66-0f89-4383-b779-c3b9162d2814"
-#define DEVICE_ID_CHAR_DESC "ID to send to client when connecting"
-
-StaticJsonDocument<4096> deviceData;
-
-BLEServer *pServer = NULL;
-BLEService *pService = NULL;
-
-BLECharacteristic *pUpdateSignChar = NULL;
-BLECharacteristic *pRFIDReqChar = NULL;
-BLECharacteristic *pDeviceIDChar = NULL;
-
-BLEDescriptor *pUpdateSignDesc = NULL;
-BLEDescriptor *pRFIDReqDesc = NULL;
-BLEDescriptor *pDeviceIDDesc = NULL;
-
-BLE2902 *pRFIDReqBLE2902 = NULL;
-BLE2902 *pDeviceIDBLE2902 = NULL;
-
-static bool connectedClient = false;
-static bool updateRequest = false;
-
-std::string uint8_tToHexString(const uint8_t *, size_t);
-std::string uuid4Format(const std::string &);
-
-#define NTP_SERVER_HOST "pool.ntp.org"
-#define UTC_OFFSET_SEC 10800
-
-int currTime[2];
-
-void getTime();
-
-class MyServerCallbacks : public BLEServerCallbacks
-{
-    void onConnect(BLEServer *pServer)
-    {
-        connectedClient = true;
-
-        Serial.println("A client has connected");
-        ld.accessQueue()->enqueue(LcdMsg("  An BLE client ", "  has connected ", 1, 3000));
-
-        pDeviceIDChar->setValue(uint8_tToHexString(deviceIdBytes, 16));
-    }
-
-    void onDisconnect(BLEServer *pServer)
-    {
-        connectedClient = false;
-
-        Serial.println("The client has disconnected");
-        ld.accessQueue()->enqueue(LcdMsg(" The BLE client ", "  has disco-ed  ", 1, 3000));
-
-        pServer->startAdvertising();
-    }
-};
-
-class CharacteristicsCallbacks : public BLECharacteristicCallbacks
-{
-    void onWrite(BLECharacteristic *pCharacteristic)
-    {
-        if (pCharacteristic == pUpdateSignChar)
-        {
-            updateRequest = true;
-            ld.accessQueue()->enqueue(LcdMsg("    Read your     ", " update request ", 1, 6000));
-        }
-        else if (pCharacteristic == pRFIDReqChar)
-        {
-            pRFIDReqChar->setValue("");
-            ld.accessQueue()->enqueue(LcdMsg("     Approach     ", "     your tag     ", 1, 6000));
-        }
-    }
-};
-
-void updateSchedule();
+void saveData(JsonObject);
 void checkSchedule(String);
+
+// BT
+
+#define BT_RFID_GET_REQ 1
+#define BT_DUID_GET_REQ 2
+#define BT_WIFI_SET_REQ 3
+#define BT_DATA_UPD_REQ 4
+
+static BluetoothSerial SerialBT;
+String receivedMsg;
+
+void bluetoothReqHandler(String);
+
+// RTC
+
+ESP32Time rtc(0);
+
+// WiFi
+
+bool switchToWiFi();
+void switchToBT();
+
+WiFiClientSecure wsClient;
+
+#define WIFI_CONNECT_TIMEOUT 4000
+
+char ssid[50];
+char pass[50];
+unsigned long conTimer;
+unsigned long lastConAtt;
+
+// TIME
+
+#define TIME_SRC "http://worldtimeapi.org/api/ip/%s"
+
+bool httpTimeUpd();
+
+// HTTP
 
 HTTPClient client;
 
+#define PUB_IP_LOOKUP "http://api.ipify.org"
+
+char ipStr[16];
+void pubIP_lookup();
+
+#define DEVICE_COMMON_ROUTE_PART "https://dispenser-backend.onrender.com/api/devices/%s"
+#define DATA_ENDPOINT_PART "/config"
+#define EVENT_ENDPOINT_PART "/event"
+
+#define CREATE_EVENT_PARAMS_FMT "?eventType=%s&eventData=%s"
+#define CREATE_EVENT_PARAMS_FMT_TRAILER "&profileId=%d"
+
+#define EVENT_FMT "{\"eventType\":\"%s\",\"eventData\":\"%s\"}"
+#define EVENT_ASSIGNMENT_TRAILER "\"profileId\":%d}"
+
+void httpsDataUpd();
+void httpsCreateEventViaPOST(String, String, unsigned int);
+void httpsCreateEventViaGET(String, String, unsigned int);
+
+StaticJsonDocument<DD_TRANSM_SIZE> json;
+
+bool startupLog;
+
 void setup()
 {
-    Wire.begin();
-    Serial.begin(BAUD_RATE);
+    // INTERFACES
 
-    Serial.println("\n\nSetup logs:\n");
+    Serial.begin(BAUD_RATE);
+    Wire.begin();
+
+    Serial.println("\n\nSetup logs:");
+
+    // LCD
+
+    ld.accessQueue()->enqueue(LcdMsg("    Setup...    ", "", 1, 1));
+    ld.update();
+
+    lcd.init();
+    lcd.backlight();
+
+    Serial.println("1. LCD setup - success");
+
+    // GPIO
 
     pinMode(SERVO_PIN, OUTPUT);
 
@@ -176,210 +192,209 @@ void setup()
     pinMode(IR_PIN, INPUT);
     pinMode(PIEZO_PIN, OUTPUT);
 
-    Serial.println("I. GPIO setup - success\n");
-
-    lcd.init();
-    lcd.backlight();
-
-    ld.accessQueue()->enqueue(LcdMsg("    Setup...    ", "", 1, 1));
-    ld.update();
-
-    Serial.println("II. LCD setup - success\n");
+    Serial.println("2. GPIO setup - success");
 
     // Device's UUID
 
-    Serial.println("III. Device uuid setup\n");
+    preferences.begin(DEVICE_PARAM_NAMESPACE, false);
+    String savedDeviceIdBase64 = preferences.getString(DEVICE_ID_SELECTOR, "");
 
-    esp_fill_random(deviceIdBytes, sizeof(deviceIdBytes));
-    deviceIdBase64 = uuid4Format(uint8_tToHexString(deviceIdBytes, 16));
-    deviceIdBase64 = "11111111-1111-1111-1111-111111111111";
-
-    sprintf(outputBuffer, "Device UUID generated: %s\n", deviceIdBase64.c_str());
-    Serial.println(outputBuffer);
-
-    // WiFi
-
-    Serial.print("IV. ");
-
-    WiFi.begin(WIFI_SSID, WIFI_PASS);
-    Serial.print("Connecting to WiFi ");
-
-    while (WiFi.status() != WL_CONNECTED)
+    if (savedDeviceIdBase64 != "")
     {
-        Serial.print(".");
-        delay(500);
+        deviceIdBase64 = savedDeviceIdBase64.c_str();
+
+        sprintf(outputBuffer, "3. Device UUID extracted: %s", deviceIdBase64.c_str());
+        Serial.println(outputBuffer);
+    }
+    else
+    {
+        esp_fill_random(deviceIdBytes, sizeof(deviceIdBytes));
+        deviceIdBase64 = uuid4Format(uint8_tToHexString(deviceIdBytes, 16));
+        preferences.putString(DEVICE_ID_SELECTOR, deviceIdBase64.c_str());
+
+        sprintf(outputBuffer, "3. Device UUID generated: %s", deviceIdBase64.c_str());
+        Serial.println(outputBuffer);
     }
 
-    sprintf(outputBuffer, "\n--- Successfully connected to '%s' with IP: ", WIFI_SSID);
-    Serial.print(outputBuffer);
-    Serial.println(WiFi.localIP());
-    Serial.print("\n");
+    preferences.end();
 
-    // BLE
+    // deviceIdBase64 = "11111111-1111-1111-1111-111111111111";
+    deviceIdBase64 = "ae82af01-1cd2-4ee9-b9b6-fb38cb05b777";
 
-    Serial.println("V. BLE initialization...");
-
-    BLEDevice::init(BLE_DEVICE_NAME);
-
-    sprintf(outputBuffer, "* BLE device intialized - %s", BLE_DEVICE_NAME);
-    Serial.println(outputBuffer);
-
-    /*
-    The smartphone app initiates the connection,
-    so the board is considered to be a server waiting
-    for incoming connections
-    */
-
-    pServer = BLEDevice::createServer();
-    pServer->setCallbacks(new MyServerCallbacks());
-
-    Serial.println("* BLE server created");
-
-    pService = pServer->createService(SERVICE_UUID);
-
-    sprintf(outputBuffer, "* BLE service created: %s", SERVICE_UUID);
-    Serial.println(outputBuffer);
-
-    /*
-    ~ BLECharacteristic::PROPERTY_WRITE - The characteristic supports writing by the client
-    ~ BLECharacteristic::PROPERTY_READ - The characteristic supports reading by the client
-    ~ BLECharacteristic::PROPERTY_NOTIFY - The characteristic supports being pushed to the client
-    */
-
-    pUpdateSignChar = pService->createCharacteristic(
-        UPDATE_SIGNAL_CHAR_UUID,
-        BLECharacteristic::PROPERTY_WRITE);
-
-    pRFIDReqChar = pService->createCharacteristic(
-        RFID_REQUEST_CHAR_UUID,
-        BLECharacteristic::PROPERTY_WRITE |
-            BLECharacteristic::PROPERTY_NOTIFY);
-
-    pDeviceIDChar = pService->createCharacteristic(
-        DEVICE_ID_CHAR_UUID,
-        BLECharacteristic::PROPERTY_READ |
-            BLECharacteristic::PROPERTY_NOTIFY);
-
-    Serial.println("* Characteristics setup:");
-    Serial.print("   ");
-    Serial.println(UPDATE_SIGNAL_CHAR_UUID);
-    Serial.print("   ");
-    Serial.println(RFID_REQUEST_CHAR_UUID);
-    Serial.print("   ");
-    Serial.println(DEVICE_ID_CHAR_UUID);
-
-    // Add some info descriptors for all the characteristics
-
-    pUpdateSignDesc = new BLEDescriptor((uint16_t)0x2901);
-    pUpdateSignDesc->setValue(UPDATE_SIGNAL_CHAR_DESC);
-    pUpdateSignChar->addDescriptor(pUpdateSignDesc);
-
-    pRFIDReqDesc = new BLEDescriptor((uint16_t)0x2901);
-    pRFIDReqDesc->setValue(RFID_REQUEST_CHAR_DESC);
-    pRFIDReqChar->addDescriptor(pRFIDReqDesc);
-
-    pDeviceIDDesc = new BLEDescriptor((uint16_t)0x2901);
-    pDeviceIDDesc->setValue(DEVICE_ID_CHAR_DESC);
-    pDeviceIDChar->addDescriptor(pDeviceIDDesc);
-
-    Serial.println("* Info descriptors attached:");
-    Serial.print("   ");
-    Serial.println(UPDATE_SIGNAL_CHAR_DESC);
-    Serial.print("   ");
-    Serial.println(RFID_REQUEST_CHAR_DESC);
-    Serial.print("   ");
-    Serial.println(DEVICE_ID_CHAR_DESC);
-
-    /*
-    For "notifications" to work properly it is necessary to
-    create them with the BLE2902 Descriptor
-    */
-
-    pRFIDReqBLE2902 = new BLE2902();
-    pRFIDReqBLE2902->setNotifications(true);
-    pRFIDReqChar->addDescriptor(pRFIDReqBLE2902);
-
-    pDeviceIDBLE2902 = new BLE2902();
-    pDeviceIDBLE2902->setNotifications(true);
-    pDeviceIDChar->addDescriptor(pDeviceIDBLE2902);
-
-    Serial.println("* BLE2902 descriptors attached:");
-    Serial.print("   ");
-    Serial.println(RFID_REQUEST_CHAR_UUID);
-    Serial.print("   ");
-    Serial.println(DEVICE_ID_CHAR_UUID);
-
-    pUpdateSignChar->setCallbacks(new CharacteristicsCallbacks());
-    pRFIDReqChar->setCallbacks(new CharacteristicsCallbacks());
-
-    Serial.println("* Characteristics' callbacks setup");
-
-    pService->start();
-    pServer->getAdvertising()->start();
-
-    Serial.println("--- Service & server advertisement started successfully\n");
+    // Motor
 
     motor.attach(SERVO_PIN);
 
-    Serial.println("VI. Motor pinout set up successfully\n");
+    Serial.println("4. Motor pinout set up successfully");
+
+    // LED-s
 
     lm.init(LedDriver(LED1_R, LED1_G), 0);
     lm.update(0, 0);
     lm.init(LedDriver(LED2_R, LED2_G), 1);
     lm.update(0, 1);
 
-    Serial.println("VII. LED indication system initialized successfully\n");
+    Serial.println("5. LED indication system initialized successfully");
+
+    // RFID
 
     rfid.init(SS_PIN, RST_PIN);
     rm.init(&rfid);
 
-    Serial.println("VIII. RFID manager initialized successfully\n");
+    Serial.println("6. RFID manager initialized successfully");
 
-    Serial.println("!Setup finished!");
+    // BT
 
-    ld.accessQueue()->enqueue(LcdMsg("     Setup      ", "    finished    ", 1, 1));
+    SerialBT.begin(BT_DEVICE);
+
+    Serial.println("7. BT operational");
+
+    // WIFI
+
+    wsClient.setCACert(cert_chain);
+
+    Serial.println("8. WiFi Secure certificate set up");
+
+    // FINISH
+
+    startupLog = false;
+    RFID_req = false;
+
+    conTimer = 0;
+
+    ld.accessQueue()->enqueue(LcdMsg("     Setup      ", "   finsihed!    ", 1, 1));
     ld.update();
 
-    updateRequest = true;
+    Serial.println("! Setup finished !\n");
 }
 
 void loop()
 {
-    if (ds.checkSeq())
+    while (SerialBT.available())
     {
-        ds.displaySequence();
-        ds.dispence();
+        char incomingChar = SerialBT.read();
+
+        if (incomingChar != '\n')
+        {
+            receivedMsg += String(incomingChar);
+        }
+        else
+        {
+            Serial.println("\nBT transmission received:");
+            Serial.println(receivedMsg);
+            bluetoothReqHandler(receivedMsg);
+            receivedMsg = "";
+        }
     }
-    else if (updateRequest)
-    {
-        updateSchedule();
-        updateRequest = false;
-    }
-    else if (pRFIDReqChar->getValue().size() == 0)
+
+    if (RFID_req)
     {
         if (rm.isNewCardRead())
         {
             rm.readUid();
 
-            sprintf(outputBuffer, "Requested UUID: %s\n", rm.getCachedUid());
+            sprintf(outputBuffer, "Requested UUID: %s", rm.getCachedUid());
             Serial.println(outputBuffer);
-            pRFIDReqChar->setValue(rm.getCachedUid().c_str());
-            pRFIDReqChar->notify();
 
-            ld.accessQueue()->enqueue(LcdMsg("    Tag UUID    ", " read suc-fully ", 1, 6000));
+            String RFID_data = rm.getCachedUid();
+
+            String response = "\"{\"resCode\":" + String(BT_RFID_GET_REQ) + ", \"payload\":{\"rfid\":\"" + RFID_data + "\"}}\"";
+            SerialBT.println(response);
+
+            char line[LCD_COLUMNS + 1];
+            sprintf(line, "    %s    ", RFID_data);
+            ld.accessQueue()->enqueue(LcdMsg("   Tag read:    ", line, 1, 1));
+
+            Serial.println("Responded with RFID ID read");
+
+            RFID_req = false;
         }
     }
-    else if (pRFIDReqChar->getValue().size() != 0)
+
+    if (strlen(ssid) > 0 && strlen(pass) > 0)
     {
-        if (rm.isNewCardRead())
+        bool timeCheck = rtc.getYear() > 1970;
+        bool dataCheck = deviceData.getProfilesSize() > 0;
+        bool ipCheck = strlen(ipStr) > 0;
+
+        if (!timeCheck || !dataCheck || !ipCheck)
         {
-            rm.readUid();
+            if (!ipCheck)
+            {
+                ld.accessQueue()->enqueue(LcdMsg("    Public IP   ", "     lookup     ", 1, 1));
+                ld.update();
+                Serial.println("Public ip is not known!");
+                pubIP_lookup();
+            }
+            else if (!timeCheck)
+            {
+                ld.accessQueue()->enqueue(LcdMsg("    Datetime    ", "     lookup    ", 1, 1));
+                ld.update();
+                Serial.println("Time is not set up!");
 
-            sprintf(outputBuffer, "Approached UUID: %s\n", rm.getCachedUid());
-            Serial.println(outputBuffer);
+                if (httpTimeUpd())
+                {
+                    std::string fmt1 = getTimeFmt(rtc.getHour(true) < 10, rtc.getMinute() < 10);
+                    std::string fmt2 = getDateFmt(rtc.getDay() < 10, rtc.getMonth() + 1 < 10);
 
-            checkSchedule(rm.getCachedUid());
+                    char line1[LCD_COLUMNS + 1];
+                    char line2[LCD_COLUMNS + 1];
+
+                    sprintf(line1, fmt1.c_str(), rtc.getHour(true), rtc.getMinute());
+                    sprintf(line2, fmt2.c_str(), rtc.getDay(), rtc.getMonth() + 1, rtc.getYear());
+
+                    Serial.println(line1);
+                    Serial.println(line2);
+                    Serial.print("\n");
+                }
+            }
+            else if (!dataCheck)
+            {
+                ld.accessQueue()->enqueue(LcdMsg("UPD config-data ", "via application ", 1, 1));
+                Serial.println("Device data is not updated!");
+            }
         }
+        else
+        {
+            if (!startupLog)
+            {
+                sprintf(outputBuffer, "{\\\"msg\\\":\\\"IntelliDose~%s has begun operation\\\"}", deviceIdBase64.c_str());
+
+                httpsCreateEventViaPOST("LOG", String(outputBuffer), 0);
+                startupLog = true;
+
+                ld.accessQueue()->enqueue(LcdMsg(" Device - fully ", "  operational!   ", 1, 1));
+            }
+
+            if (ds.checkSeq())
+            {
+                // ds.displaySequence();
+                ds.dispence();
+            }
+            else if (!RFID_req)
+            {
+                if (rm.isNewCardRead())
+                {
+                    rm.readUid();
+
+                    String RFID_data = rm.getCachedUid();
+
+                    char line[LCD_COLUMNS + 1];
+                    sprintf(line, "    %s    ", RFID_data);
+                    ld.accessQueue()->enqueue(LcdMsg("   Tag read:    ", line, 1, 1));
+
+                    sprintf(outputBuffer, "Approached UUID: %s - ", rm.getCachedUid());
+                    Serial.print(outputBuffer);
+
+                    checkSchedule(rm.getCachedUid());
+                }
+            }
+        }
+    }
+    else
+    {
+        Serial.println("Provide WiFi details!");
+        ld.accessQueue()->enqueue(LcdMsg("  Awaiting WiFi ", "     details    ", 1, 1));
     }
 
     if (id.getArmed())
@@ -388,30 +403,38 @@ void loop()
 
         switch (id.check())
         {
-        case 0:
+        case PICKUP_SUCCESS:
             pd.stopBuzz();
 
-            Serial.println("Med-s picked up");
-            ld.accessQueue()->enqueue(LcdMsg(" Healthier with ", "   IntelliDose  ", 1, 4000));
+            Serial.println("Med-s were picked up!\n");
+            ld.accessQueue()->enqueue(LcdMsg(" Healthier with ", "   IntelliDose  ", 1, 1));
 
             break;
 
-        case 1:
-            Serial.println("Mechanism failure!");
-            ld.accessQueue()->enqueue(LcdMsg("   Mechanism    ", "    failure!    ", 5, 1));
+        case MECHANISM_FAILURE_STOP:
+            Serial.println("Mechanism failure!\n");
+            ld.accessQueue()->enqueue(LcdMsg(" Mechanism fai- ", " lure reported! ", 1, 1));
+
+            httpsCreateEventViaPOST("LOG", "{\\\"msg\\\":\\\"During the dispensing procedure, a mechanism failure occurred in the device!\\\"}", 0);
 
             break;
 
-        case 2:
+        case PICKUP_FAILURE:
             pd.initBuzz();
 
-            Serial.println("Pickup failure!");
-            ld.accessQueue()->enqueue(LcdMsg("   Pickup your  ", "   medicine!    ", 5, 1));
+            Serial.println("Meds are not picked up!");
+            ld.accessQueue()->enqueue(LcdMsg("    Take your   ", "    medicine!   ", 1, 1));
+
+            break;
+
+        case PICKUP_FAILURE_STOP:
+            pd.stopBuzz();
+
+            Serial.println("STOP! (Med-s were not picked up)\n");
+
+            httpsCreateEventViaPOST("LOG", "{\\\"msg\\\":\\\"The dispensed medicine was not picked up!\\\"}", 0);
 
         default:
-            sprintf(outputBuffer, "%d seconds passed since disp. procedure start", (int)((millis() - id.getArmTime()) / 1000));
-            Serial.println(outputBuffer);
-
             break;
         }
     }
@@ -420,178 +443,187 @@ void loop()
     {
         rm.clearCachedUid();
     }
+
+    if (ld.accessQueue()->getQueueSize() == 0)
+    {
+        std::string fmt1 = getTimeFmt(rtc.getHour(true) < 10, rtc.getMinute() < 10);
+        std::string fmt2 = getDateFmt(rtc.getDay() < 10, rtc.getMonth() + 1 < 10);
+
+        char line1[LCD_COLUMNS + 1];
+        char line2[LCD_COLUMNS + 1];
+
+        sprintf(line1, fmt1.c_str(), rtc.getHour(true), rtc.getMinute());
+        sprintf(line2, fmt2.c_str(), rtc.getDay(), rtc.getMonth() + 1, rtc.getYear());
+
+        ld.accessQueue()->enqueue(LcdMsg(line1, line2, 1, 1));
+    }
+
     ld.update();
     pd.buzz();
+
+    delay(1000);
 }
 
-void updateSchedule()
+void bluetoothReqHandler(String reqString)
 {
-    if ((WiFi.status() == WL_CONNECTED))
+    char serializedData[DD_TRANSM_SIZE];
+
+    reqString.replace("\n", "");
+    reqString.trim();
+    reqString.remove(0, 1);
+    reqString.toCharArray(serializedData, DD_TRANSM_SIZE);
+
+    json.clear();
+    DeserializationError err = deserializeJson(json, serializedData);
+
+    if (err)
     {
-        // Serial.println(ESP.getFreeHeap());
+        Serial.print(F("deserializeJson() failed with code "));
+        Serial.println(err.f_str());
+        Serial.println("\n");
 
-        char url[100];
-        strcpy(url, "https://");
-        strcat(url, SCHED_SERV_HOST);
-        strcat(url, "/api/devices/");
-        strcat(url, deviceIdBase64.c_str());
-        strcat(url, "/config");
-
-        client.begin(url);
-        int httpCode = client.GET();
-
-        sprintf(outputBuffer, "GET %s : %d", url, httpCode);
-        Serial.println(outputBuffer);
-
-        if (httpCode > 0)
-        {
-            deviceData.clear();
-            DeserializationError error = deserializeJson(deviceData, client.getString());
-
-            if (error)
-            {
-                Serial.print("deserializeJson() failed: ");
-                Serial.println(error.c_str());
-                return;
-            }
-
-            // Add a bool field to make it possible to ignore already fulfilled schedule items
-
-            JsonArray profiles = deviceData["profiles"];
-            for (JsonObject profile : profiles)
-            {
-                JsonArray pillSchedules = profile["pillSchedules"];
-                for (JsonObject pillSchedule : pillSchedules)
-                {
-                    pillSchedule["dispensedToday"] = false;
-                }
-            }
-
-            JsonArray pillSlots = deviceData["pillSlots"];
-            for (JsonObject pillSlot : pillSlots)
-            {
-                int currPillCount = pillSlot["pillCount"];
-                pillSlot["pillCount"] = currPillCount + 1;
-            }
-
-            for (JsonObject pillSlot : pillSlots)
-            {
-                int slotPillCount = pillSlot["pillCount"];
-                int slotIdx = pillSlot["slotNumber"];
-                slotIdx--;
-                lm.update(slotPillCount, slotIdx);
-            }
-
-            ld.accessQueue()->enqueue(LcdMsg(" The schedules  ", "  were updated  ", 1, 3000));
-
-            Serial.println("Local schedules successfully updated:\n");
-
-            serializeJsonPretty(deviceData, Serial);
-
-            Serial.print("\n");
-        }
-        else
-        {
-            Serial.println("Error on HTTP request");
-            ld.accessQueue()->enqueue(LcdMsg(" Failed to upd. ", " the schedules  ", 1, 3000));
-        }
-
-        client.end();
+        return;
     }
-    else
+
+    int reqCode = json["reqCode"];
+    JsonObject payload = json["payload"];
+
+    switch (reqCode)
     {
-        Serial.println("No WiFi connection!");
+    case BT_DUID_GET_REQ:
+    {
+        String response = "\"{\"resCode\":" + String(BT_DUID_GET_REQ) + ",\"payload\":{\"deviceIdBase64\":\"" + String(deviceIdBase64.c_str()) + "\"}}\"";
+        SerialBT.println(response);
+
+        ld.accessQueue()->enqueue(LcdMsg(" Responded with ", " device's UUID  ", 1, 1));
+
+        Serial.println("Responded with device's UUID\n");
+    }
+    break;
+
+    case BT_RFID_GET_REQ:
+    {
+        RFID_req = true;
+
+        ld.accessQueue()->enqueue(LcdMsg("  RFID reading  ", "   requested    ", 1, 1));
+        ld.accessQueue()->enqueue(LcdMsg("    Approach    ", "    your tag    ", 1, 1));
+
+        Serial.println("RFID reading requset detected");
+    }
+    break;
+
+    case BT_WIFI_SET_REQ:
+    {
+        strcpy(ssid, payload["ssid"]);
+        strcpy(pass, payload["pass"]);
+
+        Serial.println("WiFi details received\n");
+    }
+    break;
+
+    case BT_DATA_UPD_REQ:
+    {
+        Serial.println("Data upd requested");
+        httpsDataUpd();
+    }
+    break;
+
+    default:
+        Serial.println("Unrecognized Bluetooth request!\n");
+
+        break;
     }
 }
 
 void checkSchedule(String userRFID)
 {
-    char l1Buff[LCD_COLUMNS];
-    char l2Buff[LCD_COLUMNS];
-
-    getTime();
-
-    JsonArray profiles = deviceData["profiles"];
-    JsonArray pillSlots = deviceData["pillSlots"];
+    char line1[LCD_COLUMNS + 1];
+    char line2[LCD_COLUMNS + 1];
 
     bool found = false;
 
-    for (JsonObject profile : profiles)
+    Profile *pProf = deviceData.getProfile(userRFID);
+
+    Serial.println(pProf->getUN());
+
+    if (pProf != nullptr)
     {
-        const char *rfid = profile["rfid"];
+        std::string fmt = getTimeFmt(rtc.getHour(true) < 10, rtc.getMinute() < 10);
+        sprintf(line1, fmt.c_str(), rtc.getHour(true), rtc.getMinute());
 
-        if (rfid != nullptr && userRFID.equals(rfid))
+        String nameFmt;
+        for (int i = 0; i < (LCD_COLUMNS - strlen(pProf->getUN())) / 2; i++)
         {
-            const char *username = profile["username"];
+            nameFmt += ' ';
+        }
+        nameFmt += "%s";
 
-            sprintf(outputBuffer, "Username associated with RFID %s is: %s", userRFID.c_str(), username);
-            Serial.println(outputBuffer);
+        sprintf(line2, nameFmt.c_str(), pProf->getUN());
 
-            sprintf(l2Buff, "     %d:%d      ", currTime[0], currTime[1]);
-            ld.accessQueue()->enqueue(LcdMsg(username, l2Buff, 1, 3000));
+        ld.accessQueue()->enqueue(LcdMsg(line1, line2, 1, 1));
+        ld.update();
 
-            JsonArray pillSchedules = profile["pillSchedules"];
+        for (int i = 0; i < pProf->getSchedLen(); i++)
+        {
+            ScheduleItem *pItem = pProf->getItem(i);
 
-            for (JsonObject pillSchedule : pillSchedules)
+            if (pItem->checkTime(rtc.getHour(true), rtc.getMinute(), 180))
             {
-                int hour = pillSchedule["time"]["hour"];
-                int minute = pillSchedule["time"]["minutes"];
-                int slotNumber = pillSchedule["slotNumber"];
-
-                if (pillSchedule["dispensedToday"])
+                if (pItem->getFulfileld())
                 {
-                    sprintf(outputBuffer, "%d:%d schedule item for %s  was already fulfilled today!", hour, minute, username);
+                    sprintf(outputBuffer, "%d:%d schedule item for %s  was already fulfilled today!", pItem->getTimeH(), pItem->getTimeM(), pProf->getUN());
                     Serial.println(outputBuffer);
 
-                    ld.accessQueue()->enqueue(LcdMsg("    Already     ", "   fulfilled!   ", 1, 3000));
+                    ld.accessQueue()->enqueue(LcdMsg(line1, "   FULFILLED    ", 1, 1));
 
                     continue;
                 }
-
-                if (abs((hour * 60 + minute) - (currTime[0] * 60 + currTime[1])) < 240)
+                else
                 {
                     found = true;
 
-                    JsonObject relevantSlot;
+                    PillSlot *pSlot = deviceData.getPillSlot(pItem->getSlotNum());
 
-                    for (JsonObject pillSlot : pillSlots)
-                    {
-                        if (pillSlot["slotNumber"] == slotNumber)
-                        {
-                            relevantSlot = pillSlot;
-                            break;
-                        }
-                    }
-
-                    if (!relevantSlot)
+                    if (pSlot == nullptr)
                     {
                         Serial.println("Slot not found!");
                         continue;
                     }
-
-                    for (int i = 0; i < pillSchedule["quantity"]; i++)
+                    else
                     {
-                        if (relevantSlot["pillCount"] == 0)
-                        {
-                            sprintf(outputBuffer, "Insufficient supply in slot: %d", slotNumber);
-                            Serial.println(outputBuffer);
+                        ld.accessQueue()->enqueue(LcdMsg("    Logging      ", " the operation  ", 1, 1));
+                        ld.update();
 
-                            break;
-                        }
-                        else
+                        for (int j = 0; j < pItem->getQuantity(); j++)
                         {
-                            ds.pushToSeq(slotNumber);
-                            id.arm();
-                            int currPillCount = relevantSlot["pillCount"];
-                            relevantSlot["pillCount"] = currPillCount - 1;
-                            pillSchedule["dispensedToday"] = true;
+                            if (!pSlot->checkPillCnt())
+                            {
+                                sprintf(outputBuffer, "{\\\"msg\\\":\\\"The slot #%d has run out of supplies!\\\"}", pItem->getSlotNum());
+                                httpsCreateEventViaPOST("LOG", outputBuffer, 0);
 
-                            sprintf(outputBuffer, "%d:%d | slot: %d", hour, minute, slotNumber);
-                            Serial.println(outputBuffer);
+                                break;
+                            }
+                            else
+                            {
+                                ds.pushToSeq(pItem->getSlotNum());
+                                id.arm();
+
+                                pSlot->decPillCnt();
+                                pItem->check();
+
+                                sprintf(outputBuffer, "{\\\"msg\\\":\\\"x1 %s provided to %s\\\"}", pSlot->getPillName(), pProf->getUN());
+                                httpsCreateEventViaPOST("LOG", outputBuffer, pProf->getProfileId());
+
+                                // if (!pSlot->checkPillCnt())
+                                // {
+                                //     sprintf(outputBuffer, "{\\\"msg\\\":\\\"The slot #%d has run out of supplies!\\\"}", pItem->getSlotNum());
+                                //     httpsCreateEventViaPOST("LOG", outputBuffer, 0);
+                                // }
+                            }
                         }
+
+                        lm.update(pSlot->getPillCnt(), pItem->getSlotNum() - 1);
                     }
-
-                    lm.update(relevantSlot["pillCount"], slotNumber - 1);
                 }
             }
         }
@@ -599,45 +631,367 @@ void checkSchedule(String userRFID)
 
     if (!found)
     {
-        Serial.println("No schedule items found!");
-        ld.accessQueue()->enqueue(LcdMsg("No sched. items ", "     found!     ", 1, 5000));
+        Serial.println("No profile / available schedule items found!\n");
     }
 }
 
-std::string uint8_tToHexString(const uint8_t *data, size_t len)
+bool httpTimeUpd()
 {
-    std::stringstream ss;
-    ss << std::hex;
-
-    for (size_t i = 0; i < len; ++i)
+    if (!switchToWiFi())
     {
-        ss << std::setw(2) << std::setfill('0') << static_cast<int>(data[i]);
+        Serial.println("IP lookup failed due to WiFi connection failure!\n");
+        ld.accessQueue()->enqueue(LcdMsg("  FAILED due to ", "WiFi con. issues", 1, 1));
+        return false;
     }
 
-    return ss.str();
+    Serial.println(" Connected successfully!");
+
+    char url[100];
+    sprintf(url, TIME_SRC, ipStr);
+
+    client.begin(url);
+    int httpResCode = client.GET();
+
+    if (httpResCode >= 200 && httpResCode < 300)
+    {
+        json.clear();
+        DeserializationError err = deserializeJson(json, client.getString());
+
+        if (err)
+        {
+            ld.accessQueue()->enqueue(LcdMsg("    Operation   ", "     FAILED!    ", 1, 1));
+            sprintf(outputBuffer, "Time update: deserializeJson() failed - %s!", err.c_str());
+            Serial.println(outputBuffer);
+            return false;
+        }
+
+        String datetime = json["datetime"];
+
+        struct DateTime
+        {
+            int year;
+            int month;
+            int day;
+            int hour;
+            int minute;
+            int second;
+            int ms;
+            int offsetHrs;
+        };
+
+        DateTime dt;
+        int pc = sscanf(
+            datetime.c_str(),
+            "%d-%d-%dT%d:%d:%d.%d+%d:00",
+            &dt.year, &dt.month, &dt.day, &dt.hour, &dt.minute, &dt.second, &dt.ms, &dt.offsetHrs);
+
+        if (pc == 8)
+        {
+            rtc.setTime(dt.second, dt.minute, dt.hour, dt.day, dt.month, dt.year);
+            rtc.offset = 0;
+
+            ld.accessQueue()->enqueue(LcdMsg("  Time updated  ", "  successfully! ", 1, 1));
+            Serial.println("Time update: Time successfully updated");
+        }
+        else
+        {
+            ld.accessQueue()->enqueue(LcdMsg("    Operation   ", "     FAILED!    ", 1, 1));
+            Serial.println("Time update: Error parsing datetime string!");
+            return false;
+        }
+    }
+    else
+    {
+        ld.accessQueue()->enqueue(LcdMsg("    Operation   ", "     FAILED!    ", 1, 1));
+        sprintf(outputBuffer, "Time update: Error on HTTP request - %s!", client.errorToString(httpResCode));
+        Serial.println(outputBuffer);
+    }
+
+    client.end();
+    switchToBT();
+
+    return true;
 }
 
-std::string uuid4Format(const std::string &uuid_str)
+void httpsDataUpd()
 {
-    std::string formatted_uuid =
-        uuid_str.substr(0, 8) + "-" +
-        uuid_str.substr(8, 4) + "-" +
-        uuid_str.substr(12, 4) + "-" +
-        uuid_str.substr(16, 4) + "-" +
-        uuid_str.substr(20);
+    if (!switchToWiFi())
+    {
+        Serial.println("Data update failed due to WiFi connection failure!\n");
+        ld.accessQueue()->enqueue(LcdMsg("  FAILED due to ", "WiFi con. issues", 1, 1));
+        return;
+    }
 
-    return formatted_uuid;
+    Serial.println(" Connected successfully!");
+
+    ld.accessQueue()->enqueue(LcdMsg("   Updating...  ", "", 1, 1));
+    ld.update();
+
+    char url[100];
+    sprintf(url, DEVICE_COMMON_ROUTE_PART, deviceIdBase64.c_str());
+    strcat(url, DATA_ENDPOINT_PART);
+
+    client.begin(wsClient, url);
+    int httpResCode = client.GET();
+
+    if (httpResCode >= 200 && httpResCode < 300)
+    {
+        json.clear();
+        DeserializationError err = deserializeJson(json, client.getString());
+
+        if (err)
+        {
+            ld.accessQueue()->enqueue(LcdMsg("    Operation   ", "     FAILED!    ", 1, 1));
+            sprintf(outputBuffer, "deserializeJson() failed: %s", err.c_str());
+            Serial.println(outputBuffer);
+
+            return;
+        }
+
+        saveData(json.as<JsonObject>());
+
+        deviceData.status();
+
+        ld.accessQueue()->enqueue(LcdMsg("Config-data upd.", "  successfully! ", 1, 1));
+        Serial.println("Data update: Device data successfully updated");
+    }
+    else
+    {
+        ld.accessQueue()->enqueue(LcdMsg("    Operation   ", "     FAILED!    ", 1, 1));
+        sprintf(outputBuffer, "Data update: Error on HTTPS request - %s!", client.errorToString(httpResCode));
+        Serial.println(outputBuffer);
+    }
+
+    client.end();
+    switchToBT();
 }
 
-void getTime()
+void httpsCreateEventViaPOST(String eventType, String eventData, unsigned int profileId)
 {
-    WiFiUDP ntpUDP;
-    NTPClient timeClient(ntpUDP, NTP_SERVER_HOST, UTC_OFFSET_SEC);
+    if (!switchToWiFi())
+    {
+        Serial.println("Event posting failed due to WiFi connection failure!\n");
+        return;
+    }
 
-    timeClient.begin();
-    timeClient.update();
-    currTime[0] = timeClient.getHours();
-    currTime[1] = timeClient.getMinutes();
+    Serial.println(" Connected successfully!");
 
-    timeClient.end();
+    char url[100];
+    sprintf(url, DEVICE_COMMON_ROUTE_PART, deviceIdBase64.c_str());
+    strcat(url, EVENT_ENDPOINT_PART);
+
+    char reqBody[400];
+    sprintf(reqBody, EVENT_FMT, eventType.c_str(), eventData.c_str());
+
+    if (profileId > 0)
+    {
+        char trailer[20];
+        sprintf(trailer, EVENT_ASSIGNMENT_TRAILER, profileId);
+
+        reqBody[strlen(reqBody) - 1] = ',';
+        strcat(reqBody, trailer);
+    }
+
+    Serial.print("POST event: ");
+    Serial.println(String(reqBody));
+
+    client.begin(wsClient, url);
+    client.addHeader("Content-Type", "application/json");
+
+    int httpResCode = client.POST(String(reqBody));
+
+    if (httpResCode >= 200 && httpResCode < 300)
+    {
+        Serial.println("Event posting: Success");
+    }
+    else
+    {
+        sprintf(outputBuffer, "Event posting: Error on HTTPS request - %d!", httpResCode);
+        Serial.println(outputBuffer);
+    }
+
+    client.end();
+    switchToBT();
+}
+
+void httpsCreateEventViaGET(String eventType, String eventData, unsigned int profileId)
+{
+    if (!switchToWiFi())
+    {
+        Serial.println("Event posting via GET failed due to WiFi connection failure!\n");
+        return;
+    }
+
+    Serial.println(" Connected successfully!");
+
+    char url[500];
+    sprintf(url, DEVICE_COMMON_ROUTE_PART, deviceIdBase64.c_str());
+    strcat(url, EVENT_ENDPOINT_PART);
+
+    char params[400];
+
+    sprintf(params, CREATE_EVENT_PARAMS_FMT, eventType.c_str(), eventData.c_str());
+
+    String translatedParams = String(params);
+
+    translatedParams.replace("{", "%7B");
+    translatedParams.replace("}", "%7D");
+    translatedParams.replace("\"", "%22");
+    translatedParams.replace(":", "%3A");
+    translatedParams.replace(" ", "%20");
+
+    strcpy(params, translatedParams.c_str());
+
+    if (profileId > 0)
+    {
+        char trailer[20];
+        sprintf(trailer, CREATE_EVENT_PARAMS_FMT_TRAILER, profileId);
+
+        strcat(params, trailer);
+    }
+
+    strcat(url, params);
+
+    client.begin(url);
+    int httpResCode = client.GET();
+
+    if (httpResCode >= 200 && httpResCode < 300)
+    {
+        Serial.println("Event posting via GET: Success");
+    }
+    else
+    {
+        sprintf(outputBuffer, "Event posting via GET: Error on HTTPS request - %d!", httpResCode);
+        Serial.println(outputBuffer);
+    }
+
+    client.end();
+    switchToBT();
+}
+
+void saveData(JsonObject payload)
+{
+    deviceData = DeviceData();
+
+    // Record pill slots
+
+    JsonArray pillSlots = payload["pillSlots"];
+    for (JsonObject pillSlot : pillSlots)
+    {
+        int slotNumber = pillSlot["slotNumber"];
+        const char *pillName = pillSlot["pillName"];
+        int pillCount = pillSlot["pillCount"];
+
+        deviceData.addPillSlot(PillSlot(pillName, pillCount), slotNumber);
+        lm.update(pillCount, slotNumber - 1);
+    }
+
+    // Record profiles and their schedules
+
+    JsonArray profiles = payload["profiles"];
+    for (JsonObject profile : profiles)
+    {
+        unsigned int profileId = profile["profileId"];
+        const char *username = profile["username"];
+        const char *RFID_UID = profile["rfid"];
+
+        deviceData.addProfile(Profile(profileId, username, RFID_UID));
+
+        Profile *pProf = deviceData.getProfile(String(RFID_UID));
+
+        JsonArray pillSchedules = profile["pillSchedules"];
+        for (JsonObject pillSchedule : pillSchedules)
+        {
+            int hour = pillSchedule["time"]["hour"];
+            int minute = pillSchedule["time"]["minutes"];
+            int slotNumber = pillSchedule["slotNumber"];
+            int quantity = pillSchedule["quantity"];
+
+            pProf->addItem(ScheduleItem(hour, minute, slotNumber, quantity));
+        }
+    }
+}
+
+void pubIP_lookup()
+{
+    if (!switchToWiFi())
+    {
+        Serial.println("IP lookup failed due to WiFi connection failure!\n");
+        ld.accessQueue()->enqueue(LcdMsg("  FAILED due to ", "WiFi con. issues", 1, 1));
+        return;
+    }
+
+    Serial.println(" Connected successfully!");
+
+    client.begin(PUB_IP_LOOKUP);
+    int httpResCode = client.GET();
+
+    if (httpResCode > 0)
+    {
+        strcpy(ipStr, client.getString().c_str());
+
+        ld.accessQueue()->enqueue(LcdMsg("  IP retrieved  ", "  successfully! ", 1, 1));
+        sprintf(outputBuffer, "Public IP address lookup: success - %s", ipStr);
+        Serial.println(outputBuffer);
+    }
+    else
+    {
+        ld.accessQueue()->enqueue(LcdMsg("    Operation   ", "     FAILED!    ", 1, 1));
+        sprintf(outputBuffer, "Public IP lookup: Error on HTTP request - %s!", client.errorToString(httpResCode));
+        Serial.println(outputBuffer);
+    }
+
+    client.end();
+    switchToBT();
+}
+
+bool switchToWiFi()
+{
+    sprintf(outputBuffer, "Disabling BT... connecting to %s: ..", ssid);
+    Serial.print(outputBuffer);
+
+    SerialBT.end();
+
+    lastConAtt = millis();
+    conTimer = 0;
+
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(ssid, pass);
+
+    while (WiFi.status() != WL_CONNECTED)
+    {
+        delay(250);
+
+        Serial.print(".");
+
+        conTimer += millis() - lastConAtt;
+        lastConAtt = millis();
+
+        if (conTimer > WIFI_CONNECT_TIMEOUT)
+        {
+            memset(ssid, '\0', sizeof(ssid));
+            memset(pass, '\0', sizeof(pass));
+
+            Serial.println("Attempt timed out - WiFi details erased! Restarting BT");
+
+            WiFi.disconnect(true);
+            WiFi.mode(WIFI_OFF);
+
+            SerialBT.begin(BT_DEVICE);
+
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void switchToBT()
+{
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+
+    Serial.println("WiFi disabled, restarting BT\n");
+
+    SerialBT.begin(BT_DEVICE);
 }

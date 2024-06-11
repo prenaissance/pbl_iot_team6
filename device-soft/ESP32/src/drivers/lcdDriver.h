@@ -23,10 +23,15 @@ public:
 
     int getPriority() { return priority; }
 
-    bool checkLifetime(int dt)
+    bool checkLifetime()
     {
-        lifetime -= dt;
+        lifetime--;
         return lifetime > 0;
+    }
+
+    int getLifetime()
+    {
+        return lifetime;
     }
 };
 
@@ -43,8 +48,12 @@ public:
     {
         if (queueSize < QUEUE_MAX_SIZE)
         {
-            queue[queueSize] = msg;
-            queueSize++;
+            LcdMsg prevMsg = queue[queueSize - 1];
+            if (strcmp(prevMsg.getL1(), msg.getL1()) != 0 && strcmp(prevMsg.getL2(), msg.getL2()) != 0)
+            {
+                queue[queueSize] = msg;
+                queueSize++;
+            }
         }
         else
         {
@@ -95,6 +104,11 @@ public:
     {
         return &queue[currentIdx];
     }
+
+    int getQueueSize()
+    {
+        return queueSize;
+    }
 };
 
 class LcdDriver
@@ -121,7 +135,7 @@ public:
     {
         if (current != -1)
         {
-            if (!mq.accessCurr(current)->checkLifetime(millis() - lastUpdate))
+            if (!mq.accessCurr(current)->checkLifetime())
             {
                 mq.deleteExpired(current);
                 current = -1;
@@ -134,20 +148,18 @@ public:
 
             if (current != -1)
             {
-                display(mq.accessCurr(current)->getL1(), mq.accessCurr(current)->getL2());
-            }
-            else
-            {
                 reset();
+                display(mq.accessCurr(current)->getL1(), mq.accessCurr(current)->getL2());
             }
         }
 
         lastUpdate = millis();
+
+        // Serial.println("LCD queue size = " + String(mq.getQueueSize()));
     }
 
     void display(const char *l1, const char *l2)
     {
-        reset();
         lcd->print(l1);
         lcd->setCursor(0, 1);
         lcd->print(l2);

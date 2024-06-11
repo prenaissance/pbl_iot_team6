@@ -1,5 +1,12 @@
 #define CSH_FREQ 277
 
+#define STOP -1
+#define PICKUP_ARMED_IDLE 0
+#define PICKUP_SUCCESS 1
+#define PICKUP_FAILURE 2
+#define MECHANISM_FAILURE_STOP 3
+#define PICKUP_FAILURE_STOP 4
+
 class PiezoBuzzerDriver
 {
 private:
@@ -64,21 +71,18 @@ public:
 
     void detect()
     {
-        if (armed)
+        if (!detected)
         {
-            if (!detected)
+            if (digitalRead(signalPin) == LOW)
             {
-                if (digitalRead(signalPin) == LOW)
-                {
-                    detected = true;
-                }
+                detected = true;
             }
-            else
+        }
+        else
+        {
+            if (digitalRead(signalPin) == HIGH)
             {
-                if (digitalRead(signalPin) == HIGH)
-                {
-                    picked = true;
-                }
+                picked = true;
             }
         }
     }
@@ -95,31 +99,47 @@ public:
 
     int check()
     {
-        if (millis() - armTime > 30000)
+        if (millis() - armTime > 25000)
         {
-            reset();
-            return 0;
+            if (detected && !picked)
+            {
+                reset();
+                return PICKUP_FAILURE_STOP;
+            }
+            else
+            {
+                reset();
+                return MECHANISM_FAILURE_STOP;
+            }
         }
         else if (millis() - armTime > 15000)
         {
             if (!detected)
             {
-                return 1;
                 reset();
+                return MECHANISM_FAILURE_STOP;
             }
             else if (detected && !picked)
             {
-                return 2;
+                return PICKUP_FAILURE;
             }
             else
             {
                 reset();
-                return 0;
+                return PICKUP_SUCCESS;
             }
         }
         else
         {
-            return -1;
+            if (detected && picked)
+            {
+                reset();
+                return PICKUP_SUCCESS;
+            }
+            else
+            {
+                return PICKUP_ARMED_IDLE;
+            }
         }
     }
 };

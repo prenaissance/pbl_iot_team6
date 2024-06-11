@@ -2,18 +2,20 @@ class DispenserDriver
 {
 private:
     Servo *pMotor;
-    int initAngle = 70;
-    int rotUnit = 36;
+    int initAngle = 73;
+    int angle[2];
 
 public:
     DispenserDriver(Servo *pm) : pMotor(pm)
     {
         pMotor->write(initAngle);
+        angle[0] = -52;
+        angle[1] = 40;
     }
 
-    void dispence(int cRelNum)
+    void dispence(int cNum)
     {
-        pMotor->write(initAngle + cRelNum * rotUnit);
+        pMotor->write(initAngle + angle[cNum]);
         delay(1000);
         pMotor->write(initAngle);
     }
@@ -31,7 +33,7 @@ public:
 
     int dispence()
     {
-        md->dispence(sequence[seqLen - 1]);
+        md->dispence(sequence[0]);
 
         seqLen--;
         for (int i = 0; i < seqLen; i++)
@@ -44,7 +46,7 @@ public:
 
     void pushToSeq(int cNum)
     {
-        sequence[seqLen] = (cNum == 2) ? 1 : -1;
+        sequence[seqLen] = cNum - 1;
         seqLen++;
     }
 
@@ -61,6 +63,6 @@ public:
             Serial.print(", ");
         }
 
-        Serial.println("\n");
+        Serial.print("\n");
     }
 };
