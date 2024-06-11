@@ -219,6 +219,7 @@ void setup()
     preferences.end();
 
     // deviceIdBase64 = "11111111-1111-1111-1111-111111111111";
+    deviceIdBase64 = "ae82af01-1cd2-4ee9-b9b6-fb38cb05b777";
 
     // Motor
 
@@ -279,6 +280,8 @@ void loop()
         }
         else
         {
+            Serial.println("\nBT transmission received:");
+            Serial.println(receivedMsg);
             bluetoothReqHandler(receivedMsg);
             receivedMsg = "";
         }
@@ -489,7 +492,7 @@ void bluetoothReqHandler(String reqString)
     {
     case BT_DUID_GET_REQ:
     {
-        String response = "\"{\"resCode\":" + String(BT_DUID_GET_REQ) + ", \"payload\":{\"deviceIdBase64\":\"" + String(deviceIdBase64.c_str()) + "\"}}\"";
+        String response = "\"{\"resCode\":" + String(BT_DUID_GET_REQ) + ",\"payload\":{\"deviceIdBase64\":\"" + String(deviceIdBase64.c_str()) + "\"}}\"";
         SerialBT.println(response);
 
         ld.accessQueue()->enqueue(LcdMsg(" Responded with ", " device's UUID  ", 1, 1));
@@ -514,13 +517,13 @@ void bluetoothReqHandler(String reqString)
         strcpy(ssid, payload["ssid"]);
         strcpy(pass, payload["pass"]);
 
-        Serial.println("\nWiFi details received\n");
+        Serial.println("WiFi details received\n");
     }
     break;
 
     case BT_DATA_UPD_REQ:
     {
-        Serial.println("\nData upd requested");
+        Serial.println("Data upd requested");
         httpsDataUpd();
     }
     break;
